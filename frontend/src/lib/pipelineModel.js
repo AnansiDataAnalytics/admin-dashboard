@@ -103,3 +103,95 @@ export function buildRepresentativeRun({ version, knownFrom } = {}) {
 export function phasesWithSteps() {
   return WED_PHASES.map((p) => ({ ...p, steps: WED_STEPS.filter((s) => s.phase === p.id) }));
 }
+
+// ---- real run mapping (from the /runs telemetry) ---------------------------
+
+// GitHub step/job conclusion+status -> our visual state.
+function ghState(s) {
+  const c = (s.conclusion || '').toLowerCase();
+  if (c === 'success') return 'passed';
+  if (c === 'failure' || c === 'cancelled' || c === 'timed_out') return 'failed';
+  if (c === 'skipped') return 'skipped';
+  const st = (s.status || '').toLowerCase();
+  if (st === 'in_progress') return 'running';
+  if (st === 'completed') return 'passed';
+  return 'pending'; // queued / waiting
+}
+
+function durSecs(a, b) {
+  if (!a || !b) return 0;
+  const d = (new Date(b).getTime() - new Date(a).getTime()) / 1000;
+  return d > 0 ? Math.round(d) : 0;
+}
+
+// Map a GitHub step name onto a phase. Keyword-based so it's robust to exact
+// wording and GitHub's auto-added "Set up job" / "Post …" / "Complete job" steps.
+const PHASE_RULES = [
+  [/set up job|checkout|aws|credential|oidc|health check|version format/, 'setup'],
+  [/env_vars|runtime_env|ensure (data )?director|secret/, 'configure'],
+  [/pull|repo-inputs|acquire|input.*s3|s3.*input/, 'acquire'],
+  [/stata|master pipeline|permission|chmod/, 'build'],
+  [/parse|\blog(s)?\b|validate|gate/, 'validate'],
+  [/push|publish|archive|output|mirror/, 'publish'],
+  [/ingest|mongo|source health/, 'ingest'],
+  [/cleanup|remove|shred|upload log|complete job|post /, 'cleanup'],
+];
+function inferPhase(name) {
+  const n = (name || '').toLowerCase();
+  for (const [re, phase] of PHASE_RULES) if (re.test(n)) return phase;
+  return 'cleanup';
+}
+
+// Roll real steps up into the phases that actually have steps, canonical order.
+function rollupReal(steps) {
+  return WED_PHASES.map((p) => {
+    const ps = steps.filter((s) => s.phase === p.id);
+    if (!ps.length) return null;
+    const dur = ps.reduce((a, s) => a + (s.dur || 0), 0);
+    let status = 'passed';
+    if (ps.some((s) => s.status === 'failed')) status = 'failed';
+    else if (ps.some((s) => s.status === 'running')) status = 'running';
+    else if (ps.every((s) => s.status === 'pending')) status = 'pending';
+    else if (ps.some((s) => s.status === 'pending' || s.status === 'running')) status = 'partial';
+    else if (ps.every((s) => s.status === 'skipped')) status = 'skipped';
+    return { ...p, steps: ps, dur, status };
+  }).filter(Boolean);
+}
+
+// Pick the job carrying the real pipeline steps (the wed build job).
+function pickBuildJob(jobs) {
+  const list = Object.values(jobs || {});
+  if (!list.length) return null;
+  const named = list.find((j) => /wed|build/i.test(j.name || '') && (j.steps || []).length);
+  return named || list.slice().sort((a, b) => (b.steps?.length || 0) - (a.steps?.length || 0))[0];
+}
+
+// Build a RunView-shaped object from a real /runs/:id document.
+export function runFromApi(run) {
+  if (!run) return null;
+  const state = run.status === 'success' ? 'success'
+    : run.status === 'failed' ? 'failure'
+    : run.status === 'in_progress' ? 'running' : 'queued';
+  const job = pickBuildJob(run.jobs);
+  const steps = (job?.steps || []).map((s) => ({
+    name: s.name, phase: inferPhase(s.name), status: ghState(s),
+    dur: durSecs(s.started_at, s.completed_at),
+  }));
+  const phases = steps.length ? rollupReal(steps) : [];
+  const startedAt = run.started_at ? new Date(run.started_at).getTime() : null;
+  const finishedAt = run.finished_at ? new Date(run.finished_at).getTime() : null;
+  const duration = (finishedAt && startedAt) ? Math.round((finishedAt - startedAt) / 1000)
+    : steps.reduce((a, s) => a + (s.dur || 0), 0);
+  return {
+    representative: false,
+    run_id: run.run_id,
+    version: run.release?.release_version || run.release_version || (run.git_sha ? run.git_sha.slice(0, 7) : '—'),
+    state,
+    startedAt, finishedAt, duration,
+    steps, phases,
+    triggeredManually: run.trigger === 'manual' || run.trigger === 'workflow_dispatch',
+    actor: run.actor || null,
+    html_url: run.html_url || null,
+    options: run.options || { run_mitchell: false, skip_pull: false },
+  };
+}

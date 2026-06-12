@@ -6,7 +6,7 @@ import { Icon, StatusGlyph } from '@/components/Icon';
 import RunView from '@/components/wed/RunView';
 import SourceHealth from '@/components/wed/SourceHealth';
 import ChangeExplorer, { ValueTransition, Delta } from '@/components/wed/ChangeExplorer';
-import { buildRepresentativeRun } from '@/lib/pipelineModel';
+import { buildRepresentativeRun, runFromApi } from '@/lib/pipelineModel';
 import { fmtNum, fmtPct, isoDate, stateOf } from '@/lib/format';
 
 export default function WedPage() {
@@ -20,6 +20,7 @@ export default function WedPage() {
   const [diffLoading, setDiffLoading] = useState(false);
   const [sources, setSources] = useState(null);
   const [srcFilter, setSrcFilter] = useState('');
+  const [runDetail, setRunDetail] = useState(null);
 
   useEffect(() => {
     Promise.all([api.wedSummary(), api.wedReleases(), api.wedRuns().catch(() => [])])
@@ -29,6 +30,14 @@ export default function WedPage() {
       })
       .catch((e) => setErr(e.message));
   }, []);
+
+  // Latest operational run's detail (jobs + steps) for the run view.
+  useEffect(() => {
+    if (!runs.length) { setRunDetail(null); return; }
+    let alive = true;
+    api.wedRun(runs[0].run_id).then((d) => { if (alive) setRunDetail(d); }).catch(() => {});
+    return () => { alive = false; };
+  }, [runs]);
 
   useEffect(() => {
     if (!version) return;
@@ -57,12 +66,29 @@ export default function WedPage() {
   const selected = releases?.find((r) => r.release_version === version) || null;
   const latest = summary?.latest || releases?.[0] || null;
 
-  // Representative run anchored to the real latest release (until live telemetry).
-  const hasLiveRuns = runs.length > 0;
-  const run = useMemo(
+  // Prefer the real operational run; fall back to a representative one anchored
+  // to the latest release until live telemetry exists.
+  const realRun = useMemo(() => runFromApi(runDetail), [runDetail]);
+  const repRun = useMemo(
     () => buildRepresentativeRun({ version: latest?.release_version, knownFrom: latest?.known_from }),
     [latest?.release_version, latest?.known_from],
   );
+  const run = realRun || repRun;
+
+  // Poll while a run is in progress so the run view + source health stay live.
+  useEffect(() => {
+    if (!realRun || realRun.state !== 'running') return;
+    const id = setInterval(async () => {
+      try {
+        const ru = await api.wedRuns();
+        if (Array.isArray(ru) && ru.length) {
+          setRuns(ru);
+          setRunDetail(await api.wedRun(ru[0].run_id));
+        }
+      } catch {}
+    }, 4000);
+    return () => clearInterval(id);
+  }, [realRun?.state]);
 
   return (
     <div className="shell">
@@ -84,14 +110,14 @@ export default function WedPage() {
       </div>
 
       {/* ── Workflow run — front and center ── */}
-      {!hasLiveRuns && (
+      {!realRun && (
         <div className="preview-banner">
           <span className="pb-ico"><Icon.bolt size={16} /></span>
           <div className="pb-text">
-            <b>Representative run.</b> The pipeline isn&apos;t wired to live GitHub Actions telemetry yet, so the hero,
-            flow, timeline and run details below show the shape of a completed weekly build (anchored to the current
-            release). They bind to real per-job status &amp; timings once a run fires — the webhook + heartbeat endpoints
-            are ready. The <b>release data &amp; change tracking</b> further down is <b>live</b>.
+            <b>Representative run.</b> No live GitHub Actions run has reported yet, so the hero, flow, timeline and run
+            details below show the shape of a completed weekly build (anchored to the current release). They bind to
+            real per-job status &amp; timings the moment a run fires — the webhook + heartbeat endpoints are ready. The
+            <b> release data &amp; change tracking</b> further down is <b>live</b>.
           </div>
         </div>
       )}
@@ -100,7 +126,7 @@ export default function WedPage() {
 
       <Card icon="server" title="Source health"
             hint="per-source execution · finer than GH jobs &amp; steps">
-        <SourceHealth />
+        <SourceHealth live={realRun?.state === 'running'} />
       </Card>
 
       {/* ── Live release data & change tracking ── */}

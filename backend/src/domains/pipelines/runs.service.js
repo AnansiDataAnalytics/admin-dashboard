@@ -55,9 +55,20 @@ async function upsertWorkflowRun(wr) {
   return run_id;
 }
 
-// From a GitHub `workflow_job` event — per-job (controller / wed build / stop) status.
+// From a GitHub `workflow_job` event — per-job (controller / wed build / stop)
+// status, including the per-STEP timings the payload carries (the build job's
+// steps[] are the real workflow steps, so the dashboard's run view can render
+// actual per-step status/duration, mapped onto its phases).
 async function updateWorkflowJob(job, runId) {
   const run_id = String(runId);
+  const steps = Array.isArray(job.steps) ? job.steps.map((s) => ({
+    name: s.name,
+    number: s.number,
+    status: s.status,
+    conclusion: s.conclusion || null,
+    started_at: s.started_at ? new Date(s.started_at) : null,
+    completed_at: s.completed_at ? new Date(s.completed_at) : null,
+  })) : [];
   await (await runsColl()).updateOne(
     { run_id },
     {
@@ -68,6 +79,7 @@ async function updateWorkflowJob(job, runId) {
           conclusion: job.conclusion || null,
           started_at: job.started_at ? new Date(job.started_at) : null,
           completed_at: job.completed_at ? new Date(job.completed_at) : null,
+          steps,
         },
         updated_at: new Date(),
       },

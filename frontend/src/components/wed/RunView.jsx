@@ -193,7 +193,7 @@ function RunDetails({ run }) {
           </div>
           <div className="detail-row">
             <span className="detail-ico"><Icon.user size={16} /></span>
-            <div><div className="detail-k">Actor</div><div className="detail-v">{run.triggeredManually ? 'j.okafor' : 'github-actions[bot]'}</div></div>
+            <div><div className="detail-k">Actor</div><div className="detail-v">{run.actor || (run.triggeredManually ? 'j.okafor' : 'github-actions[bot]')}</div></div>
           </div>
           <div className="detail-row">
             <span className="detail-ico"><Icon.calendar size={16} /></span>
@@ -216,6 +216,14 @@ function RunDetails({ run }) {
               </div>
             </div>
           </div>
+          {run.html_url && (
+            <div className="detail-row full">
+              <span className="detail-ico"><Icon.external size={16} /></span>
+              <div><div className="detail-k">Workflow run</div>
+                <div className="detail-v"><a href={run.html_url} target="_blank" rel="noreferrer" style={{ color: 'var(--blue-fg)', textDecoration: 'none' }}>View on GitHub ↗</a></div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div>
@@ -283,28 +291,39 @@ export default function RunView({ run }) {
     window.scrollTo({ top: y, behavior: 'smooth' });
   };
 
+  const hasPhases = (run.phases || []).length > 0;
   return (
     <>
       <RunHero run={run} />
       <RunMetrics run={run} />
 
-      <Section icon="layers" title="Pipeline flow" hint={`${run.phases.length} phases · click a phase to jump to its steps`}>
-        <Flow run={run} onJump={jump} />
-      </Section>
+      {hasPhases ? (
+        <>
+          <Section icon="layers" title="Pipeline flow" hint={`${run.phases.length} phases · click a phase to jump to its steps`}>
+            <Flow run={run} onJump={jump} />
+          </Section>
 
-      <Section icon="clock" title="Where the time goes" hint="the Stata build dominates total runtime">
-        <Gantt run={run} />
-      </Section>
+          <Section icon="clock" title="Where the time goes" hint="the Stata build dominates total runtime">
+            <Gantt run={run} />
+          </Section>
 
-      <Section icon="cpu" title="Steps &amp; logs" hint="grouped by phase · expand for detail">
-        {run.phases.map((p) => (
-          <PhaseGroup key={p.id} phase={p}
-            openDefault={p.status === 'failed' || p.status === 'running'}
-            registerRef={registerRef} />
-        ))}
-      </Section>
+          <Section icon="cpu" title="Steps &amp; logs" hint="grouped by phase · expand for detail">
+            {run.phases.map((p) => (
+              <PhaseGroup key={p.id} phase={p}
+                openDefault={p.status === 'failed' || p.status === 'running'}
+                registerRef={registerRef} />
+            ))}
+          </Section>
+        </>
+      ) : (
+        // Real run whose per-step telemetry hasn't arrived yet (early in-progress,
+        // or only the workflow_run event seen so far).
+        <Section icon="cpu" title="Pipeline steps" hint="awaiting per-step telemetry">
+          <div className="state-line"><Icon.repeat size={15} /> Per-step status will appear as the workflow_job events arrive.</div>
+        </Section>
+      )}
 
-      <Section icon="file" title="Run details" hint={run.representative ? 'representative' : ''}>
+      <Section icon="file" title="Run details" hint={run.representative ? 'representative' : (run.run_id ? `run ${run.run_id}` : '')}>
         <RunDetails run={run} />
       </Section>
     </>

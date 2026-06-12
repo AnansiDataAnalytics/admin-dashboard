@@ -10,13 +10,20 @@ import { fmtNum } from '@/lib/format';
 // missing/truncated, derived from the Stata logs (build_log_report.json).
 // Representative until the pipeline posts real per-source status (see backend
 // sourceHealth.js LIVE PATH note).
-export default function SourceHealth() {
+export default function SourceHealth({ live = false }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
-    api.wedSourceHealth().then(setData).catch((e) => setErr(e.message));
-  }, []);
+    let alive = true;
+    const load = () => api.wedSourceHealth()
+      .then((d) => { if (alive) { setData(d); setErr(null); } })
+      .catch((e) => { if (alive) setErr(e.message); });
+    load();
+    if (!live) return () => { alive = false; };
+    const id = setInterval(load, 5000); // refresh while a run is in progress
+    return () => { alive = false; clearInterval(id); };
+  }, [live]);
 
   if (err) return <div className="state-line err"><Icon.alert size={15} /> {err}</div>;
   if (!data) return <div className="state-line"><Icon.repeat size={15} /> Loading source health…</div>;

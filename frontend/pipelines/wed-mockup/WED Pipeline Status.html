@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Anansi Admin · WED Pipeline</title>
+<link rel="stylesheet" href="admin/admin.css" />
+<link rel="stylesheet" href="src/styles.css" />
+<script src="admin/theme.js"></script>
+</head>
+<body class="admin-page">
+
+<nav class="anav">
+  <div class="anav-inner">
+    <a class="anav-brand" href="Admin Home.html">
+      <span class="anav-roundel"><svg width="30" height="30" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11"></circle><path d="M12 4.6 19.4 19 H15.8 L12 11.6 L8.2 19 H4.6 Z"></path></svg></span>
+      <span class="anav-word">ANANSI</span>
+      <span class="anav-tag">Admin</span>
+    </a>
+    <div class="anav-links">
+      <a href="Admin Home.html">Home</a>
+      <a href="Pipelines.html" class="active">Pipelines</a>
+      <a href="Clients.html">Clients</a>
+      <a href="Data Review.html">Data Review</a>
+      <a href="Usage Analytics.html">Analytics</a>
+    </div>
+    <div class="anav-right">
+      <button class="theme-toggle" type="button">
+        <svg class="ic-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 119.5 4 6.3 6.3 0 0020 14.5z"></path></svg>
+        <svg class="ic-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"></path></svg>
+      </button>
+      <span class="anav-avatar">JO</span>
+    </div>
+  </div>
+</nav>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="src/data.jsx"></script>
+<script type="text/babel" src="src/icons.jsx"></script>
+<script type="text/babel" src="src/app.jsx"></script>
+<script type="text/babel" src="src/main.jsx"></script>
+</body>
+</html>

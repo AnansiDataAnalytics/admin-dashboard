@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Anansi Admin · Home</title>
+<link rel="stylesheet" href="admin/admin.css" />
+<script src="admin/theme.js"></script>
+</head>
+<body class="admin-page">
+
+<nav class="anav">
+  <div class="anav-inner">
+    <a class="anav-brand" href="Admin Home.html">
+      <span class="anav-roundel"><svg width="30" height="30" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11"></circle><path d="M12 4.6 19.4 19 H15.8 L12 11.6 L8.2 19 H4.6 Z"></path></svg></span>
+      <span class="anav-word">ANANSI</span>
+      <span class="anav-tag">Admin</span>
+    </a>
+    <div class="anav-links">
+      <a href="Admin Home.html" class="active">Home</a>
+      <a href="Pipelines.html">Pipelines</a>
+      <a href="Clients.html">Clients</a>
+      <a href="Data Review.html">Data Review</a>
+      <a href="Usage Analytics.html">Analytics</a>
+    </div>
+    <div class="anav-right">
+      <button class="theme-toggle" type="button">
+        <svg class="ic-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 119.5 4 6.3 6.3 0 0020 14.5z"></path></svg>
+        <svg class="ic-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"></path></svg>
+      </button>
+      <span class="anav-avatar">JO</span>
+    </div>
+  </div>
+</nav>
+
+<main class="apage">
+  <header class="ahero">
+    <div>
+      <div class="ahero-kicker">Internal console</div>
+      <h1>Welcome back, Joy.</h1>
+      <p>Everything that keeps Anansi running — pipelines, clients, data review and usage — from one place.</p>
+    </div>
+    <div class="ahero-clock">Fri 12 Jun 2026 · <b>10:24</b> AEST<br /><b>1</b> of 4 services live</div>
+  </header>
+
+  <section class="bento" aria-label="Services">
+    <!-- Pipeline status (live) -->
+    <a class="tile t-pipe" href="WED Pipeline Status.html" data-screen-label="Pipeline Status tile">
+      <div class="tile-k">Pipeline Status · WED</div>
+      <div class="t-pipe-status">
+        <span class="t-pipe-glyph"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l4.5 4.5L19 7"></path></svg></span>
+        <span class="t-pipe-word">Operational</span>
+      </div>
+      <div class="t-pipe-sub">Build <b>2026_06</b> succeeded 2 days ago · ran <b>2h 25m</b> · published to <b>gmd-wed-output</b></div>
+      <div class="t-pipe-foot">
+        <div>
+          <div class="ticks" aria-label="Last 12 weekly runs">
+            <span class="tick ok"></span><span class="tick ok"></span><span class="tick ok"></span><span class="tick ok"></span><span class="tick ok"></span><span class="tick ok"></span><span class="tick ok"></span><span class="tick ok"></span><span class="tick fail"></span><span class="tick ok"></span><span class="tick ok"></span><span class="tick latest"></span>
+          </div>
+          <div class="ticks-label">Last 12 weekly runs · 11 succeeded, 1 failed</div>
+        </div>
+        <span class="t-pipe-go">Open status
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+        </span>
+      </div>
+    </a>
+
+    <!-- Next scheduled build -->
+    <div class="tile t-next" data-screen-label="Next build tile">
+      <div class="tile-k">Next scheduled build</div>
+      <div class="t-next-big">5<small> days</small> 14<small> hrs</small></div>
+      <div class="t-next-sub">Wed 17 Jun · 02:00 AEST · self-hosted/wed</div>
+    </div>
+
+    <!-- Current release -->
+    <div class="tile t-release" data-screen-label="Current release tile">
+      <div>
+        <div class="tile-k">Current release</div>
+        <div class="t-release-v">2026_06</div>
+      </div>
+      <div class="tile-k" style="text-align:right">s3://gmd-wed-output</div>
+    </div>
+
+    <!-- Planned services -->
+    <a class="tile t-svc" href="Clients.html" data-screen-label="Clients tile">
+      <span class="t-svc-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19c0-3 2.4-5 5.5-5s5.5 2 5.5 5"></path><path d="M15.5 5.4a3.2 3.2 0 010 5.9M17.5 14.3c1.8.7 3 2.2 3 4.7"></path></svg></span>
+      <h3>Client Management</h3>
+      <p>Accounts, entitlements and contacts for every client.</p>
+      <span class="t-svc-tag">Planned</span>
+    </a>
+    <a class="tile t-svc" href="Data Review.html" data-screen-label="Data Review tile">
+      <span class="t-svc-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path><path d="M9.5 14.5l2 2 3.5-3.5"></path></svg></span>
+      <h3>Data Review</h3>
+      <p>Inspect, compare and sign off releases before they ship.</p>
+      <span class="t-svc-tag">Planned</span>
+    </a>
+    <a class="tile t-svc" href="Usage Analytics.html" data-screen-label="Analytics tile">
+      <span class="t-svc-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M21 20H3"></path></svg></span>
+      <h3>Usage Analytics</h3>
+      <p>API calls, downloads and engagement across products.</p>
+      <span class="t-svc-tag">Planned</span>
+    </a>
+  </section>
+
+  <footer class="afoot">
+    <span>Anansi Admin · internal use only</span>
+    <span class="mono">1 of 4 services live</span>
+  </footer>
+</main>
+
+</body>
+</html>

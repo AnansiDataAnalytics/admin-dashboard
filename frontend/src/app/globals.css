@@ -629,3 +629,18 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .shcell.is-missing, .shcell.is-truncated { color: var(--amber-fg); background: var(--amber-bg); border-color: var(--amber-line); }
 .shcell.is-more { color: var(--text-3); background: var(--gray-bg); border-color: var(--border); }
 .shcell.is-more::before { display: none; }
+.shcell.is-not_reached { color: var(--text-3); background: var(--gray-bg); border-color: var(--border); opacity: 0.75; }
+.shcell-rc { font-size: 9.5px; font-weight: 700; opacity: 0.8; padding-left: 2px; }
+
+/* Hard-abort verdict banner: any single source failure aborts the whole build,
+   so a failed run gets a prominent "halted at <stage>" call-out. */
+.shealth-halt { display: flex; align-items: flex-start; gap: 11px; padding: 13px 16px; border: 1px solid var(--red-line); background: var(--red-bg); border-radius: 14px; font-size: 13px; line-height: 1.45; }
+.shealth-halt .shh-ico { flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--red); color: #fff; }
+.shealth-count.muted b { color: var(--text-3); }
+
+.shstage-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; }
+.shstage-badge.failed { color: var(--red-fg); background: var(--red-bg); border-color: var(--red-line); }
+.shstage-badge.passed { color: var(--green-fg); background: var(--green-bg); border-color: var(--green-line); }
+.shstage-badge.not_reached { color: var(--text-3); background: var(--gray-bg); border-color: var(--border); }
+.shstage-skip { font-size: 12px; color: var(--text-3); padding: 8px 2px; font-style: italic; }
+.shproblems.subtle { border-color: var(--amber-line); background: var(--amber-bg); }

@@ -16,20 +16,19 @@ const STAGE_LABEL = { download: 'Download', clean: 'Clean', combine: 'Combine' }
 // first failing stage as the gate and every later stage as "not reached" — this
 // card leads with the blockers and dims the stages that never ran. Representative
 // until the pipeline posts real status (backend sourceHealth.js LIVE PATH note).
-export default function SourceHealth({ live = false }) {
+// `signal` bumps whenever the page refreshes (manual button or an SSE push) —
+// re-pulls source health then, instead of polling on a timer.
+export default function SourceHealth({ signal = 0 }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
     let alive = true;
-    const load = () => api.wedSourceHealth()
+    api.wedSourceHealth()
       .then((d) => { if (alive) { setData(d); setErr(null); } })
       .catch((e) => { if (alive) setErr(e.message); });
-    load();
-    if (!live) return () => { alive = false; };
-    const id = setInterval(load, 5000); // refresh while a run is in progress
-    return () => { alive = false; clearInterval(id); };
-  }, [live]);
+    return () => { alive = false; };
+  }, [signal]);
 
   if (err) return <div className="state-line err"><Icon.alert size={15} /> {err}</div>;
   if (!data) return <div className="state-line"><Icon.repeat size={15} /> Loading source health…</div>;

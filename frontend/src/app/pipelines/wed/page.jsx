@@ -1,10 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, streamUrl } from '@/lib/api';
 import { Icon, StatusGlyph } from '@/components/Icon';
 import RunView from '@/components/wed/RunView';
+import PipelineProgress from '@/components/wed/PipelineProgress';
 import SourceHealth from '@/components/wed/SourceHealth';
+import Spinner from '@/components/Spinner';
 import ChangeExplorer, { ValueTransition, Delta } from '@/components/wed/ChangeExplorer';
 import { buildRepresentativeRun, runFromApi } from '@/lib/pipelineModel';
 import { fmtNum, fmtPct, isoDate, stateOf } from '@/lib/format';
@@ -22,12 +24,13 @@ export default function WedPage() {
   const [srcFilter, setSrcFilter] = useState('');
   const [runDetail, setRunDetail] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [tick, setTick] = useState(0); // bumps on every refresh → re-pulls source health (no polling)
 
-  // Re-fetch the operational state (summary + ledger + runs). The webhook updates
-  // the BACKEND, but the page must re-poll to see it — so this drives both the
-  // manual Refresh button and the auto-poll below.
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
+  // Re-fetch the operational state (summary + ledger + runs). `quiet` skips the
+  // button's spinner state so SSE-driven refreshes don't flicker it — only the
+  // manual Refresh button shows the spinning feedback.
+  const refresh = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setRefreshing(true);
     try {
       const [s, r, ru] = await Promise.all([
         api.wedSummary(), api.wedReleases(), api.wedRuns().catch(() => []),
@@ -36,15 +39,27 @@ export default function WedPage() {
       // Default the inspected release on first load only — never clobber a
       // release the user has explicitly selected.
       setVersion((v) => v ?? (r && r.length ? r[0].release_version : null));
+      setTick((t) => t + 1); // re-pull source health alongside runs
       setErr(null);
     } catch (e) {
       setErr(e.message);
     } finally {
-      setRefreshing(false);
+      if (!quiet) setRefreshing(false);
     }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Live updates via SSE — no polling. The backend broadcasts a `run` event after
+  // every webhook/heartbeat write; we quietly re-pull on each. One idle
+  // connection (auto-reconnecting), so nothing fires when nothing is happening.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
+    const es = new EventSource(streamUrl);
+    es.addEventListener('run', () => { refresh({ quiet: true }); });
+    // onerror is non-fatal: EventSource reconnects automatically (retry: 5000).
+    return () => es.close();
+  }, [refresh]);
 
   // Latest operational run's detail (jobs + steps) for the run view.
   useEffect(() => {
@@ -90,16 +105,6 @@ export default function WedPage() {
   );
   const run = realRun || repRun;
 
-  // Auto-poll so a newly-started run AND its live progress appear without a
-  // manual reload. Fast (5s) while a run is active; slow (20s) when idle, which
-  // is enough to catch the next run starting. The runDetail effect above re-fires
-  // off `runs`, so refreshing `runs` keeps the run view + source health live.
-  useEffect(() => {
-    const period = realRun?.state === 'running' ? 5000 : 20000;
-    const id = setInterval(() => { refresh(); }, period);
-    return () => clearInterval(id);
-  }, [realRun?.state, refresh]);
-
   return (
     <div className="shell">
       <nav className="crumb">
@@ -117,9 +122,8 @@ export default function WedPage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className={`refresh-btn ${refreshing ? 'spinning' : ''}`} onClick={() => refresh()}
-                  disabled={refreshing} title="Refresh now">
-            <span className="ri"><Icon.repeat size={14} /></span>
+          <button className="refresh-btn" onClick={() => refresh()} disabled={refreshing} title="Refresh now">
+            <span className="ri">{refreshing ? <Spinner size={13} /> : <Icon.repeat size={14} />}</span>
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
           <div className="nextrun"><Icon.calendar size={14} /> weekly · <span className="mono">Wed 02:00</span></div>
@@ -141,9 +145,13 @@ export default function WedPage() {
 
       <RunView run={run} />
 
+      {/* Live in-build progress from the box heartbeat — the only source of
+          intra-build state (webhooks are blind mid-job). */}
+      {realRun && <PipelineProgress run={realRun} />}
+
       <Card icon="server" title="Source health"
             hint="per-source execution · finer than GH jobs &amp; steps">
-        <SourceHealth live={realRun?.state === 'running'} />
+        <SourceHealth signal={tick} />
       </Card>
 
       {/* ── Live release data & change tracking ── */}

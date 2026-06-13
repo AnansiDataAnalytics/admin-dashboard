@@ -15,6 +15,10 @@ async function get(path) {
 const wedBase = '/pipelines/wed';
 const v = (s) => encodeURIComponent(s);
 
+// SSE endpoint for live run updates (the dashboard opens one EventSource here
+// instead of polling). Same origin as the REST base.
+export const streamUrl = `${BASE}${wedBase}/stream`;
+
 export const api = {
   // Ledger (real data from the Phase 7 collections).
   wedSummary: () => get(`${wedBase}/summary`),

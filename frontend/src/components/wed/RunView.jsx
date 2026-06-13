@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Icon, StatusGlyph } from '@/components/Icon';
+import Spinner from '@/components/Spinner';
 import { fmtDuration, fmtDateTime, relativeTime } from '@/lib/format';
 
 // The workflow-run view (ported from the mockup): hero, metric cards, pipeline
@@ -22,7 +23,7 @@ function Section({ icon, title, hint, children }) {
 
 function RunHero({ run }) {
   const st = run.state === 'failure' ? 'failed' : run.state === 'running' ? 'running' : 'passed';
-  const icon = st === 'failed' ? <Icon.x size={28} sw={2.4} /> : st === 'running' ? <span className="pulse"><Icon.repeat size={26} /></span> : <Icon.check size={28} sw={2.4} />;
+  const icon = st === 'failed' ? <Icon.x size={28} sw={2.4} /> : st === 'running' ? <Spinner size={26} color="var(--blue-fg)" /> : <Icon.check size={28} sw={2.4} />;
   const title = st === 'failed' ? 'Latest build failed' : st === 'running' ? 'Build in progress' : 'Latest build succeeded';
   const sub = st === 'failed'
     ? <>Version <b className="mono">{run.version}</b> was <b>not published</b> — the log-parse gate caught a Stata error</>
@@ -85,8 +86,10 @@ function Flow({ run, onJump }) {
             <div className={`flow-card fc-${st}`} onClick={() => onJump(p.id)} title={p.plain}>
               <div className="flow-ico-row">
                 <span className="flow-phase-ico"><PI size={17} /></span>
-                <span className={`flow-stat fs-${st} ${st === 'running' ? 'pulse' : ''}`}>
-                  <StatusGlyph status={st === 'pending' ? 'pending' : st} size={12} />
+                <span className={`flow-stat fs-${st}`}>
+                  {st === 'running'
+                    ? <Spinner size={12} />
+                    : <StatusGlyph status={st === 'pending' ? 'pending' : st} size={12} />}
                 </span>
               </div>
               <div className="flow-name">{p.name}</div>
@@ -130,8 +133,10 @@ function StepRow({ s }) {
   const dim = s.status === 'skipped' || s.status === 'pending';
   return (
     <div className="step">
-      <span className={`step-stat ss-${s.status} ${s.status === 'running' ? 'pulse' : ''}`}>
-        {s.status !== 'skipped' && s.status !== 'pending' && <StatusGlyph status={s.status} size={11} />}
+      <span className={`step-stat ss-${s.status}`}>
+        {s.status === 'running'
+          ? <Spinner size={11} />
+          : (s.status !== 'skipped' && s.status !== 'pending' && <StatusGlyph status={s.status} size={11} />)}
       </span>
       <div className="step-main">
         <div className={`step-name ${dim ? 'dim' : ''}`}>
@@ -160,9 +165,10 @@ function PhaseGroup({ phase, openDefault, registerRef }) {
     <div className={`phase-group ${open ? 'open' : ''}`} ref={(el) => registerRef && registerRef(phase.id, el, setOpen)}>
       <button className="phase-head" onClick={() => setOpen((o) => !o)}>
         <span className="phase-chev"><Icon.chevron size={15} /></span>
-        <span className={`phase-stat fs-${st === 'pending' ? 'pending' : st} ${st === 'running' ? 'pulse' : ''}`}>
-          {st !== 'pending' && st !== 'skipped' && <StatusGlyph status={st} size={13} />}
-          {(st === 'pending' || st === 'skipped') && <PI size={13} />}
+        <span className={`phase-stat fs-${st === 'pending' ? 'pending' : st}`}>
+          {st === 'running' ? <Spinner size={13} />
+            : st !== 'pending' && st !== 'skipped' ? <StatusGlyph status={st} size={13} />
+            : <PI size={13} />}
         </span>
         <span className="phase-info">
           <span className="phase-title">{phase.name}</span>

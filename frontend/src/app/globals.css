@@ -363,23 +363,33 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .flow-node:last-child .flow-conn { display: none; }
 
 /* pulsing dot for running */
-/* In-progress indicator: a clean spinner arc orbiting the status badge/icon.
-   (Replaces an expanding-ring pulse that read as broken.) */
-.pulse { position: relative; }
-.pulse::after {
-  content: ""; position: absolute; inset: -4px; border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--blue) 22%, transparent);
-  border-top-color: var(--blue);
-  animation: spin .85s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
+/* In-progress spinners are rendered by react-spinners (<Spinner>), not CSS. */
 
 /* Manual refresh button (WED page topbar). */
 .refresh-btn { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--text-2); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 6px 11px; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
 .refresh-btn:hover:not(:disabled) { background: var(--gray-bg); border-color: var(--text-3); color: var(--text); }
 .refresh-btn:disabled { opacity: .65; cursor: default; }
 .refresh-btn .ri { display: inline-flex; }
-.refresh-btn.spinning .ri { animation: spin .85s linear infinite; }
+
+/* ── Pipeline progress (live box heartbeat: download → clean → combine) ── */
+.pp-flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 4px; }
+.pp-stage-wrap { display: flex; align-items: center; gap: 4px; flex: 1 1 200px; }
+.pp-stage { display: flex; align-items: center; gap: 11px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; flex: 1; background: var(--surface); }
+.pp-stage.pp-active { border-color: var(--blue-line); background: var(--blue-bg); }
+.pp-stage.pp-done { border-color: var(--green-line); background: var(--green-bg); }
+.pp-stage.pp-hasfail { border-color: var(--red-line); background: var(--red-bg); }
+.pp-glyph { flex: none; width: 22px; display: grid; place-items: center; }
+.pp-dot { width: 9px; height: 9px; border-radius: 999px; background: var(--text-3); opacity: .5; }
+.pp-stage-name { font-size: 13.5px; font-weight: 700; }
+.pp-stage-plain { font-size: 11px; color: var(--text-3); margin: 1px 0 3px; }
+.pp-counts { font-size: 11.5px; color: var(--text-2); }
+.pp-counts b { font-family: var(--font-mono); }
+.pp-fail { color: var(--red-fg); font-weight: 600; }
+.pp-conn { color: var(--text-3); flex: none; display: grid; place-items: center; }
+.pp-bar-wrap { margin-top: 16px; }
+.pp-bar { height: 8px; border-radius: 999px; background: var(--gray-bg); overflow: hidden; border: 1px solid var(--border); }
+.pp-bar-fill { height: 100%; background: var(--blue); transition: width .4s ease; }
+.pp-bar-meta { font-size: 12px; color: var(--text-2); margin-top: 7px; }
 
 /* steps list */
 .phase-group { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 9px; overflow: hidden; background: var(--surface); }

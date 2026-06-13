@@ -158,12 +158,19 @@ function rollupReal(steps) {
   }).filter(Boolean);
 }
 
-// Pick the job carrying the real pipeline steps (the wed build job).
+// Pick the job carrying the real pipeline steps — the WED build job, NEVER the
+// controller/stop boxes. Prefer it even with zero steps: while the build is
+// in-progress GitHub hasn't sent step detail yet (workflow_job only carries steps
+// at job start/end), and falling back to the controller's "Post …/Complete job"
+// steps is what made the run view show a misleading "cleanup, 13s". Live progress
+// during the build comes from the box heartbeat (run.progress), not from here.
 function pickBuildJob(jobs) {
   const list = Object.values(jobs || {});
   if (!list.length) return null;
-  const named = list.find((j) => /wed|build/i.test(j.name || '') && (j.steps || []).length);
-  return named || list.slice().sort((a, b) => (b.steps?.length || 0) - (a.steps?.length || 0))[0];
+  const build = list.find((j) => /\bbuild\b/i.test(j.name || ''));
+  if (build) return build;
+  const notInfra = list.filter((j) => !/(runner box|controller|^start|^stop)/i.test(j.name || ''));
+  return notInfra[0] || list.slice().sort((a, b) => (b.steps?.length || 0) - (a.steps?.length || 0))[0];
 }
 
 // Build a RunView-shaped object from a real /runs/:id document.
@@ -189,6 +196,7 @@ export function runFromApi(run) {
     state,
     startedAt, finishedAt, duration,
     steps, phases,
+    progress: run.progress || null, // box heartbeat: live stage + per-source counts
     triggeredManually: run.trigger === 'manual' || run.trigger === 'workflow_dispatch',
     actor: run.actor || null,
     html_url: run.html_url || null,

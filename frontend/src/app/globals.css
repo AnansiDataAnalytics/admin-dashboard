@@ -363,9 +363,23 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .flow-node:last-child .flow-conn { display: none; }
 
 /* pulsing dot for running */
+/* In-progress indicator: a clean spinner arc orbiting the status badge/icon.
+   (Replaces an expanding-ring pulse that read as broken.) */
 .pulse { position: relative; }
-.pulse::after { content:""; position: absolute; inset: -5px; border-radius: 999px; border: 2px solid var(--blue); animation: pulsering 1.5s ease-out infinite; opacity: 0; }
-@keyframes pulsering { 0%{ transform: scale(.7); opacity:.7;} 100%{ transform: scale(1.5); opacity: 0;} }
+.pulse::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--blue) 22%, transparent);
+  border-top-color: var(--blue);
+  animation: spin .85s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Manual refresh button (WED page topbar). */
+.refresh-btn { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--text-2); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 6px 11px; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+.refresh-btn:hover:not(:disabled) { background: var(--gray-bg); border-color: var(--text-3); color: var(--text); }
+.refresh-btn:disabled { opacity: .65; cursor: default; }
+.refresh-btn .ri { display: inline-flex; }
+.refresh-btn.spinning .ri { animation: spin .85s linear infinite; }
 
 /* steps list */
 .phase-group { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 9px; overflow: hidden; background: var(--surface); }

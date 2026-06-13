@@ -93,12 +93,16 @@ async function updateWorkflowJob(job, runId) {
 // `source_health` is stored at the top level of the run record (it's a structured
 // summary the Source-health card reads), not under progress.* like scalar fields.
 async function mergeHeartbeat(body) {
-  const { run_id, stage, progress, source_health, ...rest } = body || {};
+  const { run_id, stage, progress, source_health, version, ...rest } = body || {};
   if (!run_id) throw new Error('heartbeat requires run_id');
   const set = { updated_at: new Date() };
   if (stage) set['progress.current_stage'] = stage;
   if (progress !== undefined) set['progress.detail'] = progress;
   if (source_health !== undefined) set.source_health = source_health;
+  // The build/release version (datetime stamp) — the workflow_run webhook never
+  // carries it, so the heartbeat is how the run view learns it (otherwise it
+  // falls back to the commit hash). Stored top-level where runFromApi reads it.
+  if (version) set.release_version = version;
   for (const [k, v] of Object.entries(rest)) set[`progress.${k}`] = v;
   await (await runsColl()).updateOne(
     { run_id: String(run_id) },

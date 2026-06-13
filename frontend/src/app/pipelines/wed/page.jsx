@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { Icon, StatusGlyph } from '@/components/Icon';
 import RunView from '@/components/wed/RunView';
@@ -21,15 +21,30 @@ export default function WedPage() {
   const [sources, setSources] = useState(null);
   const [srcFilter, setSrcFilter] = useState('');
   const [runDetail, setRunDetail] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    Promise.all([api.wedSummary(), api.wedReleases(), api.wedRuns().catch(() => [])])
-      .then(([s, r, ru]) => {
-        setSummary(s); setReleases(r); setRuns(Array.isArray(ru) ? ru : []);
-        if (r && r.length) setVersion(r[0].release_version);
-      })
-      .catch((e) => setErr(e.message));
+  // Re-fetch the operational state (summary + ledger + runs). The webhook updates
+  // the BACKEND, but the page must re-poll to see it — so this drives both the
+  // manual Refresh button and the auto-poll below.
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const [s, r, ru] = await Promise.all([
+        api.wedSummary(), api.wedReleases(), api.wedRuns().catch(() => []),
+      ]);
+      setSummary(s); setReleases(r); setRuns(Array.isArray(ru) ? ru : []);
+      // Default the inspected release on first load only — never clobber a
+      // release the user has explicitly selected.
+      setVersion((v) => v ?? (r && r.length ? r[0].release_version : null));
+      setErr(null);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   // Latest operational run's detail (jobs + steps) for the run view.
   useEffect(() => {
@@ -75,20 +90,15 @@ export default function WedPage() {
   );
   const run = realRun || repRun;
 
-  // Poll while a run is in progress so the run view + source health stay live.
+  // Auto-poll so a newly-started run AND its live progress appear without a
+  // manual reload. Fast (5s) while a run is active; slow (20s) when idle, which
+  // is enough to catch the next run starting. The runDetail effect above re-fires
+  // off `runs`, so refreshing `runs` keeps the run view + source health live.
   useEffect(() => {
-    if (!realRun || realRun.state !== 'running') return;
-    const id = setInterval(async () => {
-      try {
-        const ru = await api.wedRuns();
-        if (Array.isArray(ru) && ru.length) {
-          setRuns(ru);
-          setRunDetail(await api.wedRun(ru[0].run_id));
-        }
-      } catch {}
-    }, 4000);
+    const period = realRun?.state === 'running' ? 5000 : 20000;
+    const id = setInterval(() => { refresh(); }, period);
     return () => clearInterval(id);
-  }, [realRun?.state]);
+  }, [realRun?.state, refresh]);
 
   return (
     <div className="shell">
@@ -106,7 +116,14 @@ export default function WedPage() {
             <div className="brand-sub">World Economic Database · cloud build</div>
           </div>
         </div>
-        <div className="nextrun"><Icon.calendar size={14} /> weekly · <span className="mono">Wed 02:00</span></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button className={`refresh-btn ${refreshing ? 'spinning' : ''}`} onClick={() => refresh()}
+                  disabled={refreshing} title="Refresh now">
+            <span className="ri"><Icon.repeat size={14} /></span>
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+          <div className="nextrun"><Icon.calendar size={14} /> weekly · <span className="mono">Wed 02:00</span></div>
+        </div>
       </div>
 
       {/* ── Workflow run — front and center ── */}

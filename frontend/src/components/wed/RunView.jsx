@@ -107,51 +107,8 @@ function PhaseGroup({ phase, openDefault }) {
 function RunDetails({ run }) {
   const failed = run.state === 'failure';
   return (
-    <div className="two-col">
+    <div>
       <div>
-        <div className="subhead">Execution</div>
-        <div className="detail-grid">
-          <div className="detail-row">
-            <span className="detail-ico"><Icon.bolt size={16} /></span>
-            <div><div className="detail-k">Trigger</div><div className="detail-v">{run.triggeredManually ? 'Manual dispatch' : 'Scheduled (weekly)'}</div></div>
-          </div>
-          <div className="detail-row">
-            <span className="detail-ico"><Icon.user size={16} /></span>
-            <div><div className="detail-k">Actor</div><div className="detail-v">{run.actor || (run.triggeredManually ? 'j.okafor' : 'github-actions[bot]')}</div></div>
-          </div>
-          <div className="detail-row">
-            <span className="detail-ico"><Icon.calendar size={16} /></span>
-            <div><div className="detail-k">Started</div><div className="detail-v mono" style={{ fontSize: 13 }}>{run.startedAt ? fmtDateTime(run.startedAt) : '—'}</div></div>
-          </div>
-          <div className="detail-row">
-            <span className="detail-ico"><Icon.clock size={16} /></span>
-            <div><div className="detail-k">{run.state === 'running' ? 'Status' : 'Finished'}</div><div className="detail-v mono" style={{ fontSize: 13 }}>{run.finishedAt ? fmtDateTime(run.finishedAt) : 'running…'}</div></div>
-          </div>
-          <div className="detail-row full">
-            <span className="detail-ico"><Icon.server size={16} /></span>
-            <div><div className="detail-k">Runner</div><div className="detail-v"><span className="mono" style={{ fontSize: 12.5 }}>self-hosted · linux · wed</span> <span className="detail-v muted" style={{ display: 'inline' }}>· ap-southeast-1</span></div></div>
-          </div>
-          <div className="detail-row full">
-            <span className="detail-ico"><Icon.repeat size={16} /></span>
-            <div><div className="detail-k">Run options</div>
-              <div className="detail-v" style={{ marginTop: 6 }}>
-                <span className={`opt-pill ${run.options.run_mitchell ? 'on' : 'off'}`}>run_mitchell: {String(run.options.run_mitchell)}</span>
-                <span className={`opt-pill ${run.options.skip_pull ? 'on' : 'off'}`}>skip_pull: {String(run.options.skip_pull)}</span>
-              </div>
-            </div>
-          </div>
-          {run.html_url && (
-            <div className="detail-row full">
-              <span className="detail-ico"><Icon.external size={16} /></span>
-              <div><div className="detail-k">Workflow run</div>
-                <div className="detail-v"><a href={run.html_url} target="_blank" rel="noreferrer" style={{ color: 'var(--blue-fg)', textDecoration: 'none' }}>View on GitHub ↗</a></div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-      <div>
-        <div className="subhead">Outputs &amp; artifacts</div>
         {failed ? (
           <div className="artifact" style={{ borderColor: 'var(--red-line)', background: 'var(--red-bg)' }}>
             <span className="artifact-ico" style={{ color: 'var(--red-fg)' }}><Icon.x size={16} /></span>
@@ -231,7 +188,7 @@ export default function RunView({ run }) {
         </Section>
       )}
 
-      <Section icon="file" title="Run details" hint={run.representative ? 'representative' : (run.run_id ? `run ${run.run_id}` : '')}>
+      <Section icon="cloud" title="Outputs &amp; artifacts">
         <RunDetails run={run} />
       </Section>
     </>

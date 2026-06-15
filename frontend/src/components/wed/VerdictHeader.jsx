@@ -85,6 +85,19 @@ export default function VerdictHeader({ run, signal = 0 }) {
         <div className="vrow-k">Duration</div>
         <div className="vrow-v">{fmtDuration(run?.duration)}</div>
 
+        <div className="vrow-k">Trigger</div>
+        <div className="vrow-v">{run?.triggeredManually ? 'Manual dispatch' : 'Scheduled'}<span className="muted"> · {run?.actor || (run?.triggeredManually ? 'j.okafor' : 'github-actions[bot]')}</span></div>
+
+        <div className="vrow-k">Runner</div>
+        <div className="vrow-v">self-hosted · wed <span className="muted">· ap-southeast-1</span></div>
+
+        {run?.html_url ? (
+          <>
+            <div className="vrow-k">Workflow run</div>
+            <div className="vrow-v"><a href={run.html_url} target="_blank" rel="noreferrer" style={{ color: 'var(--blue-fg)', textDecoration: 'none' }}>View on GitHub ↗</a></div>
+          </>
+        ) : null}
+
         <div className="vrow-k">Checks</div>
         <div className="vrow-v">{fmtNum(s.sources_total)} sources · {fmtNum(s.variables_total)} variables · <b>{fmtNum(v.qc_flags)} QC flags</b></div>
 

@@ -31,6 +31,7 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
   const clean = rows.filter((r) => !attention(r, stageKeys));
   const allClear = flagged.length === 0;
   const moreCount = clean.length; // count the "+N more" expander will actually reveal (== total − flagged for live data)
+  const notReached = rows.filter((r) => stageKeys.some((k) => r[k] === 'not_reached')).length;
   const cols = `1fr repeat(${stageKeys.length + 1}, 88px)`;
 
   const Row = (r) => (
@@ -46,7 +47,7 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
       <button className="mx-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="mx-chev" data-open={open}><Icon.chevron size={15} /></span>
         <span className="mx-title">{title}{sub ? <span className="mx-sub"> {sub}</span> : null}</span>
-        <span className="mx-meta">{fmtNum(total)} {unit}{allClear ? ' · all clear' : ` · ${fmtNum(flagged.length)} need attention`}</span>
+        <span className="mx-meta">{fmtNum(total)} {unit}{allClear ? ' · all clear' : ` · ${fmtNum(flagged.length)} need attention`}{notReached > 0 ? ` · ${fmtNum(notReached)} not reached` : ''}</span>
       </button>
 
       <div className="mx-colhead" style={{ gridTemplateColumns: cols }}>

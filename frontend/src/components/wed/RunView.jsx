@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Icon, StatusGlyph } from '@/components/Icon';
 import Spinner from '@/components/Spinner';
-import { fmtDuration, fmtDateTime, relativeTime } from '@/lib/format';
+import { fmtDuration, fmtDateTime } from '@/lib/format';
 
 // The workflow-run view (ported from the mockup): hero, metric cards, pipeline
 // flow, duration gantt, grouped steps + logs, and run details. Driven by a run
@@ -17,61 +17,6 @@ function Section({ icon, title, hint, children }) {
         {hint && <div className="card-hint">{hint}</div>}
       </div>
       <div className="card-body">{children}</div>
-    </div>
-  );
-}
-
-function RunMetrics({ run }) {
-  return (
-    <div className="metrics">
-      <div className="metric">
-        <div className="metric-label"><Icon.tag size={13} /> Version</div>
-        <div className="metric-value mono">{run.version}</div>
-        <div className="metric-foot">S3 output prefix</div>
-      </div>
-      <div className="metric">
-        <div className="metric-label"><Icon.clock size={13} /> Duration</div>
-        <div className="metric-value">{fmtDuration(run.duration)}</div>
-        <div className="metric-foot">across {run.steps.length} steps</div>
-      </div>
-      <div className="metric">
-        <div className="metric-label"><Icon.repeat size={13} /> Trigger</div>
-        <div className="metric-value" style={{ fontSize: 18 }}>{run.triggeredManually ? 'Manual dispatch' : 'Scheduled'}</div>
-        <div className="metric-foot">{run.startedAt ? fmtDateTime(run.startedAt) : 'weekly cadence'}</div>
-      </div>
-      <div className="metric">
-        <div className="metric-label"><Icon.calendar size={13} /> Cadence</div>
-        <div className="metric-value" style={{ fontSize: 18 }}>Weekly</div>
-        <div className="metric-foot">Wed 02:00 · self-hosted/wed</div>
-      </div>
-    </div>
-  );
-}
-
-function Flow({ run, onJump }) {
-  return (
-    <div className="flow">
-      {run.phases.map((p) => {
-        const st = p.status === 'partial' ? 'running' : p.status;
-        const PI = Icon[p.icon] || Icon.box;
-        return (
-          <div className="flow-node" key={p.id}>
-            <div className={`flow-card fc-${st}`} onClick={() => onJump(p.id)} title={p.plain}>
-              <div className="flow-ico-row">
-                <span className="flow-phase-ico"><PI size={17} /></span>
-                <span className={`flow-stat fs-${st}`}>
-                  {st === 'running'
-                    ? <Spinner size={12} />
-                    : <StatusGlyph status={st === 'pending' ? 'pending' : st} size={12} />}
-                </span>
-              </div>
-              <div className="flow-name">{p.name}</div>
-              <div className="flow-dur">{p.status === 'pending' ? 'queued' : p.status === 'running' ? 'running' : fmtDuration(p.dur)}</div>
-            </div>
-            <div className="flow-conn"><Icon.chevron size={18} /></div>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -130,12 +75,12 @@ function StepRow({ s }) {
   );
 }
 
-function PhaseGroup({ phase, openDefault, registerRef }) {
+function PhaseGroup({ phase, openDefault }) {
   const [open, setOpen] = useState(openDefault);
   const st = phase.status === 'partial' ? 'running' : phase.status;
   const PI = Icon[phase.icon] || Icon.box;
   return (
-    <div className={`phase-group ${open ? 'open' : ''}`} ref={(el) => registerRef && registerRef(phase.id, el, setOpen)}>
+    <div className={`phase-group ${open ? 'open' : ''}`}>
       <button className="phase-head" onClick={() => setOpen((o) => !o)}>
         <span className="phase-chev"><Icon.chevron size={15} /></span>
         <span className={`phase-stat fs-${st === 'pending' ? 'pending' : st}`}>
@@ -223,6 +168,7 @@ function RunDetails({ run }) {
                 <div className="artifact-name">s3://wed-output-ap1/{run.version}/final</div>
                 <div className="artifact-sub">1.4 GiB · final WED release</div>
               </div>
+              <div className="artifact-when">{run.finishedAt ? fmtDateTime(run.finishedAt) : '—'}</div>
               <span className="artifact-go"><Icon.external size={15} /></span>
             </div>
             <div className="artifact">
@@ -231,6 +177,7 @@ function RunDetails({ run }) {
                 <div className="artifact-name">s3://wed-archive-ap1/{run.version}</div>
                 <div className="artifact-sub">clean_data_wide.dta + run_report.json · vintage backup</div>
               </div>
+              <div className="artifact-when">{run.finishedAt ? fmtDateTime(run.finishedAt) : '—'}</div>
               <span className="artifact-go"><Icon.external size={15} /></span>
             </div>
             <div className="artifact">
@@ -239,6 +186,7 @@ function RunDetails({ run }) {
                 <div className="artifact-name">wed_staging · {run.version}</div>
                 <div className="artifact-sub">release sealed · change events emitted</div>
               </div>
+              <div className="artifact-when">{run.finishedAt ? fmtDateTime(run.finishedAt) : '—'}</div>
               <span className="artifact-go"><Icon.external size={15} /></span>
             </div>
           </>
@@ -259,28 +207,11 @@ function RunDetails({ run }) {
 }
 
 export default function RunView({ run }) {
-  // Smooth-scroll + flash a phase group when its flow card is clicked.
-  const refs = useState(() => ({}))[0];
-  const registerRef = (id, el, setOpen) => { refs[id] = { el, setOpen }; };
-  const jump = (id) => {
-    const r = refs[id];
-    if (!r || !r.el) return;
-    r.setOpen(true);
-    const y = r.el.getBoundingClientRect().top + window.scrollY - 80;
-    window.scrollTo({ top: y, behavior: 'smooth' });
-  };
-
   const hasPhases = (run.phases || []).length > 0;
   return (
     <>
-      <RunMetrics run={run} />
-
       {hasPhases ? (
         <>
-          <Section icon="layers" title="Pipeline flow" hint={`${run.phases.length} phases · click a phase to jump to its steps`}>
-            <Flow run={run} onJump={jump} />
-          </Section>
-
           <Section icon="clock" title="Where the time goes" hint="the Stata build dominates total runtime">
             <Gantt run={run} />
           </Section>
@@ -288,8 +219,7 @@ export default function RunView({ run }) {
           <Section icon="cpu" title="Steps &amp; logs" hint="grouped by phase · expand for detail">
             {run.phases.map((p) => (
               <PhaseGroup key={p.id} phase={p}
-                openDefault={p.status === 'failed' || p.status === 'running'}
-                registerRef={registerRef} />
+                openDefault={p.status === 'failed' || p.status === 'running'} />
             ))}
           </Section>
         </>

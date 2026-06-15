@@ -86,7 +86,7 @@ export default function VerdictHeader({ run, signal = 0 }) {
         <div className="vrow-v">{fmtDuration(run?.duration)}</div>
 
         <div className="vrow-k">Checks</div>
-        <div className="vrow-v">{fmtNum(s.passed)} / {fmtNum(s.total)} source scripts clean · <b>{fmtNum(v.qc_flags)} QC flags</b></div>
+        <div className="vrow-v">{fmtNum(s.sources_total)} sources · {fmtNum(s.variables_total)} variables · <b>{fmtNum(v.qc_flags)} QC flags</b></div>
 
         <div className="vrow-k">Next run</div>
         <div className="vrow-v mono">{NEXT_RUN_LABEL}</div>

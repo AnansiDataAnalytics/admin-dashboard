@@ -682,6 +682,7 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .verdict-headline { font-size: 15px; font-weight: 600; color: var(--text); }
 .verdict-rows { display: grid; grid-template-columns: 120px 1fr; font-size: 12.5px; }
 .verdict-rows > div { padding: 6px 0; border-top: 1px solid var(--border); }
+/* bottom border on the last row's two cells (key + value) — keep in sync if rows change */
 .verdict-rows > div:nth-last-child(-n+2) { border-bottom: 1px solid var(--border); }
 .verdict-rows .vrow-k { color: var(--text-3); }
 .verdict-rows .vrow-v { color: var(--text); }

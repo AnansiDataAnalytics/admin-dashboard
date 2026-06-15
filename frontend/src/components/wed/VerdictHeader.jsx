@@ -15,18 +15,33 @@ const STATE_META = {
   flags:   { cls: 'v-flags',   icon: 'alert', badge: 'Published · review flags' },
   blocked: { cls: 'v-blocked', icon: 'x',     badge: 'Failed' },
 };
+const NEXT_RUN_LABEL = 'weekly · Wed 02:00';
 
 export default function VerdictHeader({ run, signal = 0 }) {
   const [health, setHealth] = useState(null);
+  const [err, setErr] = useState(null);
   useEffect(() => {
     let alive = true;
-    api.wedSourceHealth().then((d) => { if (alive) setHealth(d); }).catch(() => {});
+    api.wedSourceHealth()
+      .then((d) => { if (alive) { setHealth(d); setErr(null); } })
+      .catch((e) => { if (alive) setErr(e?.message || 'Failed to load build status'); });
     return () => { alive = false; };
   }, [signal]);
 
+  if (err) {
+    return (
+      <div className="verdict v-blocked">
+        <div className="verdict-head">
+          <span className="verdict-ico"><Icon.alert size={20} /></span>
+          <div className="verdict-headline">Build status unavailable: {err}</div>
+        </div>
+      </div>
+    );
+  }
+
   if (!health) {
     return (
-      <div className="verdict v-loading">
+      <div className="verdict">
         <div className="verdict-head">
           <span className="verdict-ico"><Icon.repeat size={20} /></span>
           <div className="verdict-headline">Loading build status…</div>
@@ -74,7 +89,7 @@ export default function VerdictHeader({ run, signal = 0 }) {
         <div className="vrow-v">{fmtNum(s.passed)} / {fmtNum(s.total)} source scripts clean · <b>{fmtNum(v.qc_flags)} QC flags</b></div>
 
         <div className="vrow-k">Next run</div>
-        <div className="vrow-v mono">weekly · Wed 02:00</div>
+        <div className="vrow-v mono">{NEXT_RUN_LABEL}</div>
       </div>
     </div>
   );

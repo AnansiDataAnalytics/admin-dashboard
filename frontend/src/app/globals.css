@@ -293,41 +293,8 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .runrow-num { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-3); }
 .runrow-dur { font-size: 11px; color: var(--text-3); }
 
-/* status badge */
-.sbadge { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 5px 12px 5px 10px; font-weight: 600; font-size: 12.5px; border: 1px solid transparent; }
-.sbadge .gl { display: grid; place-items: center; }
-.s-passed { color: var(--green-fg); background: var(--green-bg); border-color: var(--green-line); }
-.s-failed { color: var(--red-fg); background: var(--red-bg); border-color: var(--red-line); }
-.s-running { color: var(--blue-fg); background: var(--blue-bg); border-color: var(--blue-line); }
-.s-pending,.s-skipped { color: var(--text-3); background: var(--gray-bg); }
-.s-partial { color: var(--amber); background: var(--amber-bg); }
-
-/* hero */
-.hero { position: relative; overflow: hidden; background: var(--tile-sheen), var(--surface); border: 1px solid var(--border); border-radius: var(--radius-tile); padding: 26px 28px; box-shadow: var(--shadow-sm); margin-bottom: 14px; }
-.hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: var(--hero-wash, transparent); }
-.hero.h-passed { --hero-wash: linear-gradient(100deg, color-mix(in srgb, var(--green-bg) 70%, transparent), transparent 42%); }
-.hero.h-failed { --hero-wash: linear-gradient(100deg, color-mix(in srgb, var(--red-bg) 80%, transparent), transparent 42%); }
-.hero.h-running { --hero-wash: linear-gradient(100deg, color-mix(in srgb, var(--blue-bg) 80%, transparent), transparent 42%); }
-.hero-top { position: relative; display: flex; align-items: flex-start; gap: 18px; }
-.hero-icon { width: 54px; height: 54px; border-radius: 15px; flex: none; display: grid; place-items: center; border: 1px solid transparent; }
-.hi-passed { color: var(--green-fg); background: var(--green-bg); border-color: var(--green-line); }
-.hi-failed { color: var(--red-fg); background: var(--red-bg); border-color: var(--red-line); }
-.hi-running { color: var(--blue-fg); background: var(--blue-bg); border-color: var(--blue-line); }
-.hero-headline { font-size: 25px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.12; }
-.hero-sub { color: var(--text-2); font-size: 14.5px; margin-top: 5px; font-weight: 500; }
-.hero-sub b { color: var(--text); font-weight: 700; }
-.hero-spacer { flex: 1; }
-.hero-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 9px; }
 .nextrun { font-size: 12.5px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
 .nextrun .mono { color: var(--text); }
-
-/* metric cards */
-.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
-.metric { background: var(--tile-sheen), var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 16px 18px; box-shadow: var(--shadow-sm); }
-.metric-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.metric-value { font-size: 21px; font-weight: 700; margin-top: 9px; letter-spacing: -0.01em; line-height: 1.1; }
-.metric-value.mono { font-size: 19px; }
-.metric-foot { font-size: 12px; color: var(--text-2); margin-top: 4px; }
 
 /* section card */
 .card { background: var(--tile-sheen), var(--surface); border: 1px solid var(--border); border-radius: var(--radius-tile); box-shadow: var(--shadow-sm); margin-bottom: 14px; overflow: hidden; }
@@ -337,30 +304,11 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .card-hint { font-size: 12px; color: var(--text-3); text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-body { padding: 20px; }
 
-/* pipeline flow */
-.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
-.flow-node { flex: 1 1 0; min-width: 116px; position: relative; display: flex; flex-direction: column; padding: 0 4px; }
-.flow-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 13px 13px 14px; cursor: pointer; transition: transform .14s, border-color .14s, box-shadow .14s; height: 100%; display: flex; flex-direction: column; gap: 9px; }
-.flow-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
-.flow-card.fc-passed { border-color: var(--green-line); }
-.flow-card.fc-failed { border-color: var(--red-line); background: var(--red-bg); }
-.flow-card.fc-running { border-color: var(--blue-line); background: var(--blue-bg); }
-.flow-card.fc-pending { opacity: .62; }
-.flow-card.fc-idle { opacity: .9; }
-.flow-ico-row { display: flex; align-items: center; justify-content: space-between; }
-.flow-phase-ico { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--border); color: var(--text-2); }
-.fc-passed .flow-phase-ico { color: var(--green-fg); }
-.fc-failed .flow-phase-ico { color: var(--red-fg); }
-.fc-running .flow-phase-ico { color: var(--blue-fg); }
 .flow-stat { width: 20px; height: 20px; border-radius: 999px; display: grid; place-items: center; color: #fff; }
 .fs-passed { background: var(--green); }
 .fs-failed { background: var(--red); }
 .fs-running { background: var(--blue); }
 .fs-skipped,.fs-pending,.fs-partial,.fs-idle { background: var(--gray); }
-.flow-name { font-size: 13px; font-weight: 700; line-height: 1.15; }
-.flow-dur { font-size: 11.5px; color: var(--text-2); font-family: var(--font-mono); }
-.flow-conn { position: absolute; top: 30px; right: -10px; width: 20px; color: var(--border-strong); z-index: 2; display: grid; place-items: center; }
-.flow-node:last-child .flow-conn { display: none; }
 
 /* pulsing dot for running */
 /* In-progress spinners are rendered by react-spinners (<Spinner>), not CSS. */
@@ -404,7 +352,6 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .phase-plain { font-size: 12px; color: var(--text-3); margin-top: 2px; }
 .phase-meta { font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .phase-dur { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-2); font-weight: 500; min-width: 52px; text-align: right; }
-.steps-wrap { overflow: hidden; transition: height .22s ease; }
 .step-list { border-top: 1px solid var(--border); background: var(--surface-2); }
 .step { display: grid; grid-template-columns: 20px 1fr auto; align-items: start; gap: 12px; padding: 7px 16px 7px 18px; border-bottom: 1px solid var(--border); }
 .step:last-child { border-bottom: none; }
@@ -422,20 +369,13 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .chip.cond { color: var(--amber); background: var(--amber-bg); border-color: transparent; }
 .step-dur { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); white-space: nowrap; margin-top: 1px; }
 
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .subhead { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin: 0 0 12px; }
 
 .foot { text-align: center; color: var(--text-3); font-size: 12px; margin-top: 26px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .dot-sep { width: 3px; height: 3px; border-radius: 999px; background: var(--text-3); display: inline-block; }
 
-@media (max-width: 880px) {
-  .metrics { grid-template-columns: repeat(2, 1fr); }
-  .two-col { grid-template-columns: 1fr; }
-}
 @media (max-width: 620px) {
   .shell { padding: 20px 16px 70px; }
-  .metrics { grid-template-columns: 1fr 1fr; }
-  .hero-right { display: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -559,19 +499,6 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .step-log.err { color: var(--red-fg); background: var(--red-bg); border-color: var(--red-line); }
 .step-log .lg-mark { color: var(--text-3); flex: none; display: inline-grid; place-items: center; }
 
-/* run details grid */
-.detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; }
-.detail-row { display: flex; align-items: flex-start; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--border); }
-.detail-row.full { grid-column: 1 / -1; }
-.detail-ico { width: 30px; height: 30px; border-radius: 8px; flex: none; display: grid; place-items: center; background: var(--surface-inset); color: var(--text-2); }
-.detail-k { font-size: 11.5px; color: var(--text-3); font-weight: 600; letter-spacing: .02em; }
-.detail-v { font-size: 13.5px; font-weight: 600; margin-top: 2px; }
-.detail-v .mono { font-weight: 500; }
-.detail-v.muted { color: var(--text-3); font-weight: 500; }
-.opt-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-family: var(--font-mono); padding: 2px 9px; border-radius: 7px; background: var(--surface-inset); border: 1px solid var(--border); margin-right: 6px; }
-.opt-pill.on { color: var(--blue-fg); background: var(--blue-bg); border-color: var(--blue-line); }
-.opt-pill.off { color: var(--text-3); }
-
 /* artifacts */
 .artifact { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); margin-bottom: 8px; }
 .artifact:last-child { margin-bottom: 0; }
@@ -583,7 +510,6 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .artifact-go { color: var(--text-3); display: grid; place-items: center; }
 
 @media (max-width: 880px) {
-  .detail-grid { grid-template-columns: 1fr; }
   .gantt-row { grid-template-columns: 110px 1fr 52px; }
   .gantt-axis { padding-left: 122px; }
 }
@@ -619,56 +545,6 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
   .srcrow { grid-template-columns: 100px 1fr; }
   .srcrow-counts { display: none; }
 }
-
-/* ═══════════════════════════════════════════════════════════════════════
-   Source-level execution health (per-source pass/fail under the Stata step)
-   ═══════════════════════════════════════════════════════════════════════ */
-.shealth-summary { display: flex; align-items: center; gap: 15px; padding: 14px 18px; border: 1px solid var(--border); border-radius: 16px; margin-bottom: 16px; }
-.shealth-summary.ok { border-color: var(--green-line); background: var(--green-bg); }
-.shealth-summary.bad { border-color: var(--red-line); background: var(--red-bg); }
-.shealth-ico { width: 42px; height: 42px; border-radius: 12px; flex: none; display: grid; place-items: center; color: #fff; }
-.shealth-summary.ok .shealth-ico { background: var(--green); }
-.shealth-summary.bad .shealth-ico { background: var(--red); }
-.shealth-headline { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
-.shealth-counts { margin-left: auto; display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-2); }
-.shealth-count b { font-family: var(--font-mono); font-weight: 700; margin-right: 3px; }
-.shealth-count.ok b { color: var(--green-fg); }
-.shealth-count.bad b { color: var(--red-fg); }
-.shealth-count.warn b { color: var(--amber-fg); }
-
-.shproblems { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; border: 1px solid var(--red-line); background: var(--red-bg); border-radius: 12px; margin-bottom: 18px; }
-.shp-label { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--red-fg); display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; }
-
-.shealth-stage { margin-top: 20px; }
-.shealth-stage:first-of-type { margin-top: 4px; }
-.shstage-head { font-size: 13.5px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: baseline; gap: 9px; }
-.shstage-head .plain { font-size: 11.5px; color: var(--text-3); font-weight: 500; }
-.shealth-group { margin-bottom: 14px; }
-.shgroup-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 11.5px; color: var(--text-2); font-weight: 600; margin-bottom: 8px; }
-.shgroup-head .mono { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); font-weight: 500; }
-.shgrid { display: flex; flex-wrap: wrap; gap: 6px; }
-.shcell { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 7px; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.shcell::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: currentColor; flex: none; }
-.shcell.is-passed { color: var(--green-fg); background: var(--green-bg); border-color: var(--green-line); }
-.shcell.is-failed { color: var(--red-fg); background: var(--red-bg); border-color: var(--red-line); }
-.shcell.is-missing, .shcell.is-truncated { color: var(--amber-fg); background: var(--amber-bg); border-color: var(--amber-line); }
-.shcell.is-more { color: var(--text-3); background: var(--gray-bg); border-color: var(--border); }
-.shcell.is-more::before { display: none; }
-.shcell.is-not_reached { color: var(--text-3); background: var(--gray-bg); border-color: var(--border); opacity: 0.75; }
-.shcell-rc { font-size: 9.5px; font-weight: 700; opacity: 0.8; padding-left: 2px; }
-
-/* Hard-abort verdict banner: any single source failure aborts the whole build,
-   so a failed run gets a prominent "halted at <stage>" call-out. */
-.shealth-halt { display: flex; align-items: flex-start; gap: 11px; padding: 13px 16px; border: 1px solid var(--red-line); background: var(--red-bg); border-radius: 14px; font-size: 13px; line-height: 1.45; }
-.shealth-halt .shh-ico { flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--red); color: #fff; }
-.shealth-count.muted b { color: var(--text-3); }
-
-.shstage-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; }
-.shstage-badge.failed { color: var(--red-fg); background: var(--red-bg); border-color: var(--red-line); }
-.shstage-badge.passed { color: var(--green-fg); background: var(--green-bg); border-color: var(--green-line); }
-.shstage-badge.not_reached { color: var(--text-3); background: var(--gray-bg); border-color: var(--border); }
-.shstage-skip { font-size: 12px; color: var(--text-3); padding: 8px 2px; font-style: italic; }
-.shproblems.subtle { border-color: var(--amber-line); background: var(--amber-bg); }
 
 /* ── Verdict header — one reconciled build status (replaces RunHero) ── */
 .verdict { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px; background: var(--surface); }

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { fmtNum } from '@/lib/format';
+import { STAGE_LABEL } from '@/lib/pipelineModel';
 
 // Two-matrix source health. "Source processing" is per-source (Download · Clean ·
 // QC); "Combine" is per-variable (Combine · QC). QC is a count of advisory
@@ -9,7 +10,6 @@ import { fmtNum } from '@/lib/format';
 // failed a stage or carry QC flags show first; all-clear rows fold behind a
 // "+N more" expander, and an all-clear matrix collapses to a one-line summary.
 // `health` is fetched once by the page and passed in as a prop — this component does not fetch.
-const STAGE_LABEL = { download: 'Download', clean: 'Clean', combine: 'Combine' };
 
 function StageCell({ status }) {
   if (status === 'failed') return <span className="mx-cell mx-failed"><Icon.x size={13} /></span>;
@@ -55,33 +55,22 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
         <span className="mx-col">QC flags</span>
       </div>
 
-      {allClear ? (
-        open ? (
-          <>
-            {clean.map(Row)}
-            <button className="mx-more" onClick={() => setOpen(false)}>▴ Show fewer</button>
-          </>
-        ) : (
-          <div className="mx-row mx-allclear" style={{ gridTemplateColumns: cols }}>
-            <span className="mx-name muted">All {fmtNum(total)} {unit} clean</span>
-            {stageKeys.map((k) => <span key={k} className="mx-cell mx-ok">●</span>)}
-            <span className="mx-cell mx-ok">0</span>
-          </div>
-        )
-      ) : (
+      {flagged.map(Row)}
+      {open ? (
         <>
-          {flagged.map(Row)}
-          {open ? (
-            <>
-              {clean.map(Row)}
-              <button className="mx-more" onClick={() => setOpen(false)}>▴ Show fewer</button>
-            </>
-          ) : (
-            moreCount > 0 && (
-              <button className="mx-more" onClick={() => setOpen(true)}>▸ +{fmtNum(moreCount)} more {unit} — all clear</button>
-            )
-          )}
+          {clean.map(Row)}
+          <button className="mx-more" onClick={() => setOpen(false)}>▴ Show fewer</button>
         </>
+      ) : allClear ? (
+        <div className="mx-row mx-allclear" style={{ gridTemplateColumns: cols }}>
+          <span className="mx-name muted">All {fmtNum(total)} {unit} clean</span>
+          {stageKeys.map((k) => <span key={k} className="mx-cell mx-ok">●</span>)}
+          <span className="mx-cell mx-ok">0</span>
+        </div>
+      ) : (
+        moreCount > 0 && (
+          <button className="mx-more" onClick={() => setOpen(true)}>▸ +{fmtNum(moreCount)} more {unit} — all clear</button>
+        )
       )}
     </div>
   );

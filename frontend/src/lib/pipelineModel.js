@@ -8,6 +8,9 @@
 // produced the current release". When /runs returns real data, the same view
 // binds to it (a real run's jobs map onto these phases).
 
+// Per-source / per-variable pipeline stages, in order, with display labels.
+export const STAGE_LABEL = { download: 'Download', clean: 'Clean', combine: 'Combine' };
+
 export const WED_PHASES = [
   { id: 'setup', name: 'Setup', plain: 'Prepare the runner and authenticate to AWS', icon: 'server' },
   { id: 'configure', name: 'Configure', plain: 'Generate credentials and runtime configuration', icon: 'sliders' },

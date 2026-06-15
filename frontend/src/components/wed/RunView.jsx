@@ -108,8 +108,7 @@ function RunDetails({ run }) {
   const failed = run.state === 'failure';
   return (
     <div>
-      <div>
-        {failed ? (
+      {failed ? (
           <div className="artifact" style={{ borderColor: 'var(--red-line)', background: 'var(--red-bg)' }}>
             <span className="artifact-ico" style={{ color: 'var(--red-fg)' }}><Icon.x size={16} /></span>
             <div className="artifact-main">
@@ -148,15 +147,14 @@ function RunDetails({ run }) {
             </div>
           </>
         )}
-        <div style={{ marginTop: 14 }} className="subhead">Data flow</div>
-        <div className="artifact" style={{ background: 'var(--surface)', flexDirection: 'column', alignItems: 'stretch', gap: 9 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', flexWrap: 'wrap', gap: 6 }}>
-            <span className="mono" style={{ fontSize: 11.5 }}>gmd-wed-data-ap1</span>
-            <Icon.arrowRight size={14} /><span>build</span>
-            <Icon.arrowRight size={14} /><span className="mono" style={{ fontSize: 11.5 }}>wed-output-ap1</span>
-            <Icon.arrowRight size={14} /><span>ingest</span>
-            <Icon.arrowRight size={14} /><span className="mono" style={{ fontSize: 11.5 }}>wed_staging</span>
-          </div>
+      <div style={{ marginTop: 14 }} className="subhead">Data flow</div>
+      <div className="artifact" style={{ background: 'var(--surface)', flexDirection: 'column', alignItems: 'stretch', gap: 9 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', flexWrap: 'wrap', gap: 6 }}>
+          <span className="mono" style={{ fontSize: 11.5 }}>gmd-wed-data-ap1</span>
+          <Icon.arrowRight size={14} /><span>build</span>
+          <Icon.arrowRight size={14} /><span className="mono" style={{ fontSize: 11.5 }}>wed-output-ap1</span>
+          <Icon.arrowRight size={14} /><span>ingest</span>
+          <Icon.arrowRight size={14} /><span className="mono" style={{ fontSize: 11.5 }}>wed_staging</span>
         </div>
       </div>
     </div>

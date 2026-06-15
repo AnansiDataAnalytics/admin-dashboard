@@ -2,8 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mostRecentScheduledMs, nextScheduledMs, runStaleness } from './schedule.mjs';
 
-// Wed 18 Jun 2025, 12:00 local (mid-day to avoid TZ boundary flakiness).
-// NOTE: Jun 18 2025 is a Wednesday. The original spec said 2025 but Jun 18 2025 is a Thursday.
+// Wed 18 Jun 2025, 12:00 local (a real Wednesday; mid-day avoids TZ boundary flakiness).
 const wedNoon = new Date(2025, 5, 18, 12, 0, 0).getTime();
 
 test('mostRecentScheduledMs is this week\'s Wednesday 02:00', () => {

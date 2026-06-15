@@ -2,6 +2,7 @@
 // `now` so they're deterministic and unit-testable (no reliance on the wall clock).
 const RUN_DOW = 3;   // Wednesday (0 = Sunday)
 const RUN_HOUR = 2;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // The most recent scheduled run time at or before `nowMs`.
 export function mostRecentScheduledMs(nowMs) {
@@ -13,7 +14,7 @@ export function mostRecentScheduledMs(nowMs) {
   return d.getTime();
 }
 
-// The next scheduled run time strictly after (or at) `nowMs`.
+// The next scheduled run time at or after `nowMs`.
 export function nextScheduledMs(nowMs) {
   const d = new Date(nowMs);
   d.setHours(RUN_HOUR, 0, 0, 0);
@@ -27,7 +28,7 @@ export function nextScheduledMs(nowMs) {
 // cadence already lives in the page topbar).
 export function nextScheduledRunLabel(now = new Date()) {
   const d = new Date(nextScheduledMs(now.getTime()));
-  return `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} · 02:00`;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()} · 02:00`;
 }
 
 // Is a scheduled run overdue? Overdue when the most-recent scheduled time has

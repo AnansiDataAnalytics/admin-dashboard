@@ -165,17 +165,21 @@ export default function RunView({ run }) {
   const hasPhases = (run.phases || []).length > 0;
   return (
     <>
+      <Section icon="cloud" title="Outputs &amp; artifacts">
+        <RunDetails run={run} />
+      </Section>
+
       {hasPhases ? (
         <>
-          <Section icon="clock" title="Where the time goes">
-            <Gantt run={run} />
-          </Section>
-
           <Section icon="cpu" title="Steps &amp; logs">
             {run.phases.map((p) => (
               <PhaseGroup key={p.id} phase={p}
                 openDefault={p.status === 'failed' || p.status === 'running'} />
             ))}
+          </Section>
+
+          <Section icon="clock" title="Where the time goes">
+            <Gantt run={run} />
           </Section>
         </>
       ) : (
@@ -185,10 +189,6 @@ export default function RunView({ run }) {
           <div className="state-line"><Icon.repeat size={15} /> Per-step status will appear as the workflow_job events arrive.</div>
         </Section>
       )}
-
-      <Section icon="cloud" title="Outputs &amp; artifacts">
-        <RunDetails run={run} />
-      </Section>
     </>
   );
 }

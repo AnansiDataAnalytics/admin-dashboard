@@ -139,7 +139,11 @@ export default function WedPage() {
 
       <VerdictHeader run={run} health={health} err={healthErr} />
 
-      {/* ── Workflow run — front and center ── */}
+      <Card icon="server" title="Source health">
+        <SourceHealth health={health} err={healthErr} />
+      </Card>
+
+      {/* ── Workflow run ── */}
       {!realRun && (
         <div className="preview-banner">
           <span className="pb-ico"><Icon.bolt size={16} /></span>
@@ -154,10 +158,6 @@ export default function WedPage() {
       {/* Live in-build progress from the box heartbeat — the only source of
           intra-build state (webhooks are blind mid-job). */}
       {realRun && <PipelineProgress run={realRun} />}
-
-      <Card icon="server" title="Source health">
-        <SourceHealth health={health} err={healthErr} />
-      </Card>
 
       {/* ── Live release data & change tracking ── */}
       <div className="rsplit">

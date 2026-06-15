@@ -716,3 +716,11 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .mx-skip { color: var(--text-3); }
 .mx-more { width: 100%; text-align: center; border: none; border-top: 1px solid var(--border); background: var(--surface-inset); color: var(--text-2); font-size: 11.5px; padding: 9px; cursor: pointer; font-family: var(--font-ui); }
 .mx-more:hover { background: var(--surface-2); }
+
+/* verdict liveness states */
+.verdict.v-awaiting { border-color: var(--border-strong); background: var(--surface-2); }
+.v-awaiting .verdict-ico { color: var(--text-2); }
+.v-awaiting .vbadge { background: var(--gray-bg); color: var(--text-2); }
+.verdict.v-overdue { border-color: var(--amber-line); background: var(--amber-bg); }
+.v-overdue .verdict-ico { color: var(--amber-fg); }
+.v-overdue .vbadge { background: var(--amber-bg); color: var(--amber-fg); }

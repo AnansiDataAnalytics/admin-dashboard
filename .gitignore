@@ -10,3 +10,6 @@ npm-debug.log*
 *.log
 .DS_Store
 .vscode/
+
+# brainstorm visual companion
+.superpowers/

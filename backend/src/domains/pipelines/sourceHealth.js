@@ -81,7 +81,7 @@ async function getSourceHealth() {
       { projection: { _id: 0, run_id: 1, source_health: 1, updated_at: 1 }, sort: { updated_at: -1 } },
     );
     if (run && run.source_health) {
-      result = { representative: false, run_id: run.run_id, generated_at: run.updated_at || null, ...run.source_health };
+      result = { ...run.source_health, representative: false, run_id: run.run_id, generated_at: run.updated_at || null };
     }
   }
   if (!result) result = representativeManifest();

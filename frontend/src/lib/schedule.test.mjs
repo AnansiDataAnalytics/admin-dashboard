@@ -18,6 +18,13 @@ test('nextScheduledMs from Wed noon is next Wednesday 02:00', () => {
   assert.equal(d.getDate(), 25);
 });
 
+test('mostRecentScheduledMs from a Thursday is the prior Wednesday', () => {
+  const thuNoon = new Date(2025, 5, 19, 12, 0, 0).getTime(); // Thu 19 Jun 2025
+  const d = new Date(mostRecentScheduledMs(thuNoon));
+  assert.equal(d.getDay(), 3);
+  assert.equal(d.getDate(), 18); // Wed 18 Jun 2025
+});
+
 test('overdue: scheduled time passed grace and no run since', () => {
   const lastRunMs = new Date(2025, 5, 11, 3, 0, 0).getTime(); // a week earlier
   const r = runStaleness({ lastRunMs, nowMs: wedNoon, graceHours: 6 });

@@ -1,0 +1,81 @@
+'use client';
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+import { Icon } from '@/components/Icon';
+import { fmtNum, fmtDuration, fmtDateTime, relativeTime } from '@/lib/format';
+
+// The single operator-facing verdict, reconciled to real execution truth: the
+// source-health payload now carries a derived `verdict`. Replaces the old
+// always-green RunHero that contradicted source health. `signal` bumps on every
+// page refresh (manual button or SSE push) so this re-pulls in step with the
+// rest of the page instead of polling.
+const STAGE_LABEL = { download: 'Download', clean: 'Clean', combine: 'Combine' };
+const STATE_META = {
+  healthy: { cls: 'v-healthy', icon: 'check', badge: 'Published' },
+  flags:   { cls: 'v-flags',   icon: 'alert', badge: 'Published · review flags' },
+  blocked: { cls: 'v-blocked', icon: 'x',     badge: 'Failed' },
+};
+
+export default function VerdictHeader({ run, signal = 0 }) {
+  const [health, setHealth] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api.wedSourceHealth().then((d) => { if (alive) setHealth(d); }).catch(() => {});
+    return () => { alive = false; };
+  }, [signal]);
+
+  if (!health) {
+    return (
+      <div className="verdict v-loading">
+        <div className="verdict-head">
+          <span className="verdict-ico"><Icon.repeat size={20} /></span>
+          <div className="verdict-headline">Loading build status…</div>
+        </div>
+      </div>
+    );
+  }
+
+  const v = health.verdict || { state: 'healthy', qc_flags: 0, gated_stage: null };
+  const meta = STATE_META[v.state] || STATE_META.healthy;
+  const I = Icon[meta.icon] || Icon.check;
+  const s = health.summary || {};
+  const version = run?.version || '—';
+  const gatedLabel = STAGE_LABEL[v.gated_stage] || v.gated_stage;
+
+  const headline =
+    v.state === 'blocked'
+      ? (v.gated_stage ? `Build failed — halted at ${gatedLabel}` : 'Build failed — release blocked')
+      : v.state === 'flags'
+        ? `Published with ${fmtNum(v.qc_flags)} QC flag${v.qc_flags === 1 ? '' : 's'} to review`
+        : `Published & healthy — ${version} is live`;
+
+  return (
+    <div className={`verdict ${meta.cls}`}>
+      <div className="verdict-head">
+        <span className="verdict-ico"><I size={22} /></span>
+        <div className="verdict-headline">{headline}</div>
+      </div>
+      <div className="verdict-rows">
+        <div className="vrow-k">Status</div>
+        <div className="vrow-v"><span className="vbadge">{meta.badge}</span></div>
+
+        <div className="vrow-k">Version</div>
+        <div className="vrow-v mono">{version}{v.state === 'blocked' ? <span className="muted"> · not published</span> : null}</div>
+
+        <div className="vrow-k">{run?.finishedAt ? 'Finished' : 'Status'}</div>
+        <div className="vrow-v">{run?.finishedAt
+          ? <>{fmtDateTime(run.finishedAt)} <span className="muted">· {relativeTime(run.finishedAt)}</span></>
+          : 'in progress'}</div>
+
+        <div className="vrow-k">Duration</div>
+        <div className="vrow-v">{fmtDuration(run?.duration)}</div>
+
+        <div className="vrow-k">Checks</div>
+        <div className="vrow-v">{fmtNum(s.passed)} / {fmtNum(s.total)} source scripts clean · <b>{fmtNum(v.qc_flags)} QC flags</b></div>
+
+        <div className="vrow-k">Next run</div>
+        <div className="vrow-v mono">weekly · Wed 02:00</div>
+      </div>
+    </div>
+  );
+}

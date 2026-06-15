@@ -57,7 +57,12 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
       </div>
 
       {allClear ? (
-        open ? clean.map(Row) : (
+        open ? (
+          <>
+            {clean.map(Row)}
+            <button className="mx-more" onClick={() => setOpen(false)}>▴ Show fewer</button>
+          </>
+        ) : (
           <div className="mx-row mx-allclear" style={{ gridTemplateColumns: cols }}>
             <span className="mx-name muted">All {fmtNum(total)} {unit} clean</span>
             {stageKeys.map((k) => <span key={k} className="mx-cell mx-ok">●</span>)}
@@ -67,10 +72,16 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
       ) : (
         <>
           {flagged.map(Row)}
-          {open ? clean.map(Row)
-                : (moreCount > 0 && (
-                    <button className="mx-more" onClick={() => setOpen(true)}>▸ +{fmtNum(moreCount)} more {unit} — all clear</button>
-                  ))}
+          {open ? (
+            <>
+              {clean.map(Row)}
+              <button className="mx-more" onClick={() => setOpen(false)}>▴ Show fewer</button>
+            </>
+          ) : (
+            moreCount > 0 && (
+              <button className="mx-more" onClick={() => setOpen(true)}>▸ +{fmtNum(moreCount)} more {unit} — all clear</button>
+            )
+          )}
         </>
       )}
     </div>

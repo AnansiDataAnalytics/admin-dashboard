@@ -50,7 +50,7 @@ export default function VerdictHeader({ run, signal = 0 }) {
     );
   }
 
-  const v = health.verdict || { state: 'healthy', qc_flags: 0, gated_stage: null };
+  const v = health.verdict || { state: 'blocked', hard_failures: 0, qc_flags: 0, gated_stage: null };
   const meta = STATE_META[v.state] || STATE_META.healthy;
   const I = Icon[meta.icon] || Icon.check;
   const s = health.summary || {};

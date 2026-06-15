@@ -37,3 +37,9 @@ test('missing manifest is treated as blocked, not healthy', () => {
   const v = deriveVerdict(null);
   assert.equal(v.state, 'blocked');
 });
+
+test('missing summary is treated as blocked, not healthy', () => {
+  const v = deriveVerdict({}); // health present, summary absent
+  assert.equal(v.state, 'blocked');
+  assert.equal(v.hard_failures, 0);
+});

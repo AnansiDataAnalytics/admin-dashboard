@@ -25,13 +25,20 @@ export default function WedPage() {
   const [srcFilter, setSrcFilter] = useState('');
   const [runDetail, setRunDetail] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [tick, setTick] = useState(0); // bumps on every refresh → re-pulls source health (no polling)
+  const [health, setHealth] = useState(null);
+  const [healthErr, setHealthErr] = useState(null);
 
   // Re-fetch the operational state (summary + ledger + runs). `quiet` skips the
   // button's spinner state so SSE-driven refreshes don't flicker it — only the
   // manual Refresh button shows the spinning feedback.
   const refresh = useCallback(async ({ quiet = false } = {}) => {
     if (!quiet) setRefreshing(true);
+    // Source health drives the verdict header (fail-loud) — fetch and error-handle
+    // it independently so a source-health outage doesn't blank the release section,
+    // and so the header and the Source-health card share ONE request.
+    api.wedSourceHealth()
+      .then((h) => { setHealth(h); setHealthErr(null); })
+      .catch((e) => { setHealthErr(e.message || 'Failed to load build status'); });
     try {
       const [s, r, ru] = await Promise.all([
         api.wedSummary(), api.wedReleases(), api.wedRuns().catch(() => []),
@@ -40,7 +47,6 @@ export default function WedPage() {
       // Default the inspected release on first load only — never clobber a
       // release the user has explicitly selected.
       setVersion((v) => v ?? (r && r.length ? r[0].release_version : null));
-      setTick((t) => t + 1); // re-pull source health alongside runs
       setErr(null);
     } catch (e) {
       setErr(e.message);
@@ -131,7 +137,7 @@ export default function WedPage() {
         </div>
       </div>
 
-      <VerdictHeader run={run} signal={tick} />
+      <VerdictHeader run={run} health={health} err={healthErr} />
 
       {/* ── Workflow run — front and center ── */}
       {!realRun && (
@@ -150,7 +156,7 @@ export default function WedPage() {
       {realRun && <PipelineProgress run={realRun} />}
 
       <Card icon="server" title="Source health">
-        <SourceHealth signal={tick} />
+        <SourceHealth health={health} err={healthErr} />
       </Card>
 
       {/* ── Live release data & change tracking ── */}

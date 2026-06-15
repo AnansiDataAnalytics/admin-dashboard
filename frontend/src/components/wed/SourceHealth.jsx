@@ -1,6 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { fmtNum } from '@/lib/format';
 
@@ -88,25 +87,14 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
   );
 }
 
-export default function SourceHealth({ signal = 0 }) {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    api.wedSourceHealth()
-      .then((d) => { if (alive) { setData(d); setErr(null); } })
-      .catch((e) => { if (alive) setErr(e.message); });
-    return () => { alive = false; };
-  }, [signal]);
-
+export default function SourceHealth({ health, err }) {
   if (err) return <div className="state-line err"><Icon.alert size={15} /> {err}</div>;
-  if (!data) return <div className="state-line"><Icon.repeat size={15} /> Loading source health…</div>;
+  if (!health) return <div className="state-line"><Icon.repeat size={15} /> Loading source health…</div>;
 
-  const s = data.summary || {};
+  const s = health.summary || {};
   return (
     <div>
-      {data.representative && (
+      {health.representative && (
         <div className="preview-banner" style={{ marginBottom: 16 }}>
           <span className="pb-ico"><Icon.bolt size={16} /></span>
           <div className="pb-text">
@@ -118,12 +106,12 @@ export default function SourceHealth({ signal = 0 }) {
       <Matrix
         title="Source processing"
         unit="sources" stageKeys={['download', 'clean']}
-        rows={data.sources || []} total={s.sources_total || (data.sources || []).length} />
+        rows={health.sources || []} total={s.sources_total || (health.sources || []).length} />
 
       <Matrix
         title="Combine"
         unit="variables" stageKeys={['combine']}
-        rows={data.variables || []} total={s.variables_total || (data.variables || []).length} />
+        rows={health.variables || []} total={s.variables_total || (health.variables || []).length} />
     </div>
   );
 }

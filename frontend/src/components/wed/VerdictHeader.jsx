@@ -1,17 +1,15 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
 import { Icon } from '@/components/Icon';
 import { fmtNum, fmtDuration, fmtDateTime, relativeTime, toMs } from '@/lib/format';
 import { nextScheduledRunLabel, runStaleness } from '@/lib/schedule.mjs';
 
 // The single operator-facing status, reconciled to real execution truth AND to
-// liveness. Trust rules:
+// liveness. Driven by `health` (the source-health payload, fetched once in the
+// page) and `err` (a fetch outage). Trust rules:
 //   • a fetch error is an OUTAGE → red "unavailable" (never a green fallback);
 //   • representative data (no live run yet) → neutral "awaiting", NOT a confident
 //     healthy/flags/blocked verdict;
 //   • live data whose latest scheduled run never arrived → amber "overdue".
-// `signal` bumps on every page refresh so this re-pulls with the rest of the page.
 const STAGE_LABEL = { download: 'Download', clean: 'Clean', combine: 'Combine' };
 const STATE_META = {
   healthy:  { cls: 'v-healthy',  icon: 'check', badge: 'Published' },
@@ -21,17 +19,7 @@ const STATE_META = {
   overdue:  { cls: 'v-overdue',  icon: 'alert', badge: 'Run overdue' },
 };
 
-export default function VerdictHeader({ run, signal = 0 }) {
-  const [health, setHealth] = useState(null);
-  const [err, setErr] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    api.wedSourceHealth()
-      .then((d) => { if (alive) { setHealth(d); setErr(null); } })
-      .catch((e) => { if (alive) setErr(e?.message || 'Failed to load build status'); });
-    return () => { alive = false; };
-  }, [signal]);
-
+export default function VerdictHeader({ run, health, err }) {
   // Fail loud: an error fetching status is an outage, not a healthy state.
   if (err) {
     return (
@@ -92,10 +80,10 @@ export default function VerdictHeader({ run, signal = 0 }) {
             <div className="vrow-k">Version</div>
             <div className="vrow-v mono">{version}{v.state === 'blocked' ? <span className="muted"> · not published</span> : null}</div>
 
-            <div className="vrow-k">{run?.finishedAt ? 'Finished' : 'Status'}</div>
+            <div className="vrow-k">{run?.finishedAt ? 'Finished' : 'Started'}</div>
             <div className="vrow-v">{run?.finishedAt
               ? <>{fmtDateTime(run.finishedAt)} <span className="muted">· {relativeTime(run.finishedAt)}</span></>
-              : 'in progress'}</div>
+              : (run?.startedAt ? <>{fmtDateTime(run.startedAt)} <span className="muted">· running</span></> : 'in progress')}</div>
 
             <div className="vrow-k">Duration</div>
             <div className="vrow-v">{fmtDuration(run?.duration)}</div>

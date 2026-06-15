@@ -8,7 +8,7 @@ import { fmtNum } from '@/lib/format';
 // deterministic flags — it never blocks a release (see verdict.js). Rows that
 // failed a stage or carry QC flags show first; all-clear rows fold behind a
 // "+N more" expander, and an all-clear matrix collapses to a one-line summary.
-// `signal` bumps on each page refresh so this re-pulls with the rest of the page.
+// `health` is fetched once by the page and passed in as a prop — this component does not fetch.
 const STAGE_LABEL = { download: 'Download', clean: 'Clean', combine: 'Combine' };
 
 function StageCell({ status }) {

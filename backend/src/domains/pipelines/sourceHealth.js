@@ -66,6 +66,10 @@ async function getSourceHealth() {
   let result = null;
   try {
     const db = await getDb(config.metaDb);
+    // NB: findOne takes (filter, options) — projection AND sort must live in the
+    // SAME options object. Passing sort as a 3rd arg silently drops it, returning
+    // an arbitrary run. Sort by updated_at (the heartbeat always stamps it) so the
+    // most-recent run that carries source_health wins.
     const run = await db.collection('pipeline_runs').findOne(
       { source_health: { $exists: true } },
       { projection: { _id: 0, run_id: 1, source_health: 1, updated_at: 1 }, sort: { updated_at: -1 } },

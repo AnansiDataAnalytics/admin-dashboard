@@ -152,8 +152,7 @@ export default function WedPage() {
           intra-build state (webhooks are blind mid-job). */}
       {realRun && <PipelineProgress run={realRun} />}
 
-      <Card icon="server" title="Source health"
-            hint="per-source execution · finer than GH jobs &amp; steps">
+      <Card icon="server" title="Source health">
         <SourceHealth signal={tick} />
       </Card>
 

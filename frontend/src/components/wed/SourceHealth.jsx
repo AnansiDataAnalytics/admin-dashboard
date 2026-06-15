@@ -45,7 +45,7 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
     <div className="mx">
       <button className="mx-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="mx-chev" data-open={open}><Icon.chevron size={15} /></span>
-        <span className="mx-title">{title} <span className="mx-sub">{sub}</span></span>
+        <span className="mx-title">{title}{sub ? <span className="mx-sub"> {sub}</span> : null}</span>
         <span className="mx-meta">{fmtNum(total)} {unit}{allClear ? ' · all clear' : ` · ${fmtNum(flagged.length)} need attention`}</span>
       </button>
 
@@ -105,12 +105,12 @@ export default function SourceHealth({ signal = 0 }) {
       )}
 
       <Matrix
-        title="Source processing" sub="· fetch & clean · source by source"
+        title="Source processing"
         unit="sources" stageKeys={['download', 'clean']}
         rows={data.sources || []} total={s.sources_total || (data.sources || []).length} />
 
       <Matrix
-        title="Combine" sub="· chain-linking · variable by variable"
+        title="Combine"
         unit="variables" stageKeys={['combine']}
         rows={data.variables || []} total={s.variables_total || (data.variables || []).length} />
     </div>

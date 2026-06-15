@@ -64,12 +64,13 @@ function representativeManifest() {
   };
 }
 
-// Serve the latest live run's source health if a run record carries it; else the
-// representative manifest. (A run record gets `source_health` once the pipeline
-// posts it — see the LIVE PATH note above.)
 async function getSourceHealth() {
   let result = null;
-  try {
+  // Serve representative data ONLY when Mongo is unconfigured (local/dev) or it is
+  // reachable but no run has posted source health yet. A thrown DB error when
+  // Mongo IS configured is a real outage — let it propagate so the dashboard fails
+  // loud ("status unavailable") instead of showing a reassuring representative state.
+  if (config.mongoUri) {
     const db = await getDb(config.metaDb);
     // NB: findOne takes (filter, options) — projection AND sort must live in the
     // SAME options object. Passing sort as a 3rd arg silently drops it, returning
@@ -82,8 +83,6 @@ async function getSourceHealth() {
     if (run && run.source_health) {
       result = { representative: false, run_id: run.run_id, generated_at: run.updated_at || null, ...run.source_health };
     }
-  } catch {
-    // fall through to the representative manifest
   }
   if (!result) result = representativeManifest();
   result.verdict = deriveVerdict(result);

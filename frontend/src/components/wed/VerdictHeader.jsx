@@ -15,7 +15,16 @@ const STATE_META = {
   flags:   { cls: 'v-flags',   icon: 'alert', badge: 'Published · review flags' },
   blocked: { cls: 'v-blocked', icon: 'x',     badge: 'Failed' },
 };
-const NEXT_RUN_LABEL = 'weekly · Wed 02:00';
+// The concrete next scheduled run (weekly cadence, Wednesday 02:00 local). The
+// cadence label lives in the page topbar; this row shows the actual upcoming date.
+function nextScheduledRunLabel(now = new Date()) {
+  const d = new Date(now);
+  d.setHours(2, 0, 0, 0);
+  let add = (3 - d.getDay() + 7) % 7; // 3 = Wednesday
+  if (add === 0 && now.getTime() >= d.getTime()) add = 7; // past 02:00 today → next week
+  d.setDate(d.getDate() + add);
+  return `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} · 02:00`;
+}
 
 export default function VerdictHeader({ run, signal = 0 }) {
   const [health, setHealth] = useState(null);
@@ -102,7 +111,7 @@ export default function VerdictHeader({ run, signal = 0 }) {
         <div className="vrow-v">{fmtNum(s.sources_total)} sources · {fmtNum(s.variables_total)} variables · <b>{fmtNum(v.qc_flags)} QC flags</b></div>
 
         <div className="vrow-k">Next run</div>
-        <div className="vrow-v mono">{NEXT_RUN_LABEL}</div>
+        <div className="vrow-v mono">{nextScheduledRunLabel()}</div>
       </div>
     </div>
   );

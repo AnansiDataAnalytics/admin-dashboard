@@ -30,7 +30,7 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
   const flagged = rows.filter((r) => attention(r, stageKeys));
   const clean = rows.filter((r) => !attention(r, stageKeys));
   const allClear = flagged.length === 0;
-  const moreCount = Math.max(total - flagged.length, 0);
+  const moreCount = clean.length; // count the "+N more" expander will actually reveal (== total − flagged for live data)
   const cols = `1fr repeat(${stageKeys.length + 1}, 88px)`;
 
   const Row = (r) => (
@@ -43,7 +43,7 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
 
   return (
     <div className="mx">
-      <button className="mx-head" onClick={() => setOpen((o) => !o)}>
+      <button className="mx-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="mx-chev" data-open={open}><Icon.chevron size={15} /></span>
         <span className="mx-title">{title} <span className="mx-sub">{sub}</span></span>
         <span className="mx-meta">{fmtNum(total)} {unit}{allClear ? ' · all clear' : ` · ${fmtNum(flagged.length)} need attention`}</span>
@@ -105,7 +105,7 @@ export default function SourceHealth({ signal = 0 }) {
       )}
 
       <Matrix
-        title="Source processing" sub="· fetch &amp; clean · source by source"
+        title="Source processing" sub="· fetch & clean · source by source"
         unit="sources" stageKeys={['download', 'clean']}
         rows={data.sources || []} total={s.sources_total || (data.sources || []).length} />
 

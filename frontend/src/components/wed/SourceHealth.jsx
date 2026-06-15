@@ -98,8 +98,7 @@ export default function SourceHealth({ signal = 0 }) {
         <div className="preview-banner" style={{ marginBottom: 16 }}>
           <span className="pb-ico"><Icon.bolt size={16} /></span>
           <div className="pb-text">
-            <b>Representative.</b> Real per-source status (Download · Clean · QC) and per-variable status
-            (Combine · QC) post from each run once the heartbeat secret is configured — statuses below are illustrative.
+            <b>Representative.</b> Illustrative statuses until a live run posts real per-source results.
           </div>
         </div>
       )}

@@ -138,10 +138,7 @@ export default function WedPage() {
         <div className="preview-banner">
           <span className="pb-ico"><Icon.bolt size={16} /></span>
           <div className="pb-text">
-            <b>Representative run.</b> No live GitHub Actions run has reported yet, so the hero, flow, timeline and run
-            details below show the shape of a completed weekly build (anchored to the current release). They bind to
-            real per-job status &amp; timings the moment a run fires — the webhook + heartbeat endpoints are ready. The
-            <b> release data &amp; change tracking</b> further down is <b>live</b>.
+            <b>Representative run.</b> No live run has reported yet — the timeline &amp; steps below show the shape of a weekly build. Release data &amp; change tracking further down is <b>live</b>.
           </div>
         </div>
       )}
@@ -185,7 +182,7 @@ export default function WedPage() {
             <ReleasePicker releases={releases} value={version} onChange={setVersion} />
           </div>
 
-          <Card icon="layers" title="Release ledger" hint={`${releases.length} releases · newest first · click to inspect`}>
+          <Card icon="layers" title="Release ledger" hint={`${releases.length} releases`}>
             <LedgerTable releases={releases} value={version} onSelect={setVersion} />
           </Card>
 
@@ -195,13 +192,13 @@ export default function WedPage() {
           </Card>
 
           <Card icon="server" title="Source breakdown"
-                hint={selected.from_release ? 'which upstream sources moved · click to drill in' : 'baseline load'}>
+                hint={selected.from_release ? null : 'baseline load'}>
             <SourceBreakdown release={selected} data={sources} active={srcFilter} onPick={pickSource} />
           </Card>
 
           <div id="change-explorer">
             <Card icon="search" title="Change explorer"
-                  hint={srcFilter ? `filtered to ${srcFilter} · click again to clear` : 'every typed change event · filter &amp; page'}>
+                  hint={srcFilter ? `filtered to ${srcFilter}` : null}>
               <ChangeExplorer version={version} source={srcFilter} onSource={setSrcFilter}
                               sources={(sources?.sources || []).map((s) => s.source)} />
             </Card>

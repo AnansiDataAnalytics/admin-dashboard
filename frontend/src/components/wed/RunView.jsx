@@ -212,11 +212,11 @@ export default function RunView({ run }) {
     <>
       {hasPhases ? (
         <>
-          <Section icon="clock" title="Where the time goes" hint="the Stata build dominates total runtime">
+          <Section icon="clock" title="Where the time goes">
             <Gantt run={run} />
           </Section>
 
-          <Section icon="cpu" title="Steps &amp; logs" hint="grouped by phase · expand for detail">
+          <Section icon="cpu" title="Steps &amp; logs">
             {run.phases.map((p) => (
               <PhaseGroup key={p.id} phase={p}
                 openDefault={p.status === 'failed' || p.status === 'running'} />
@@ -226,7 +226,7 @@ export default function RunView({ run }) {
       ) : (
         // Real run whose per-step telemetry hasn't arrived yet (early in-progress,
         // or only the workflow_run event seen so far).
-        <Section icon="cpu" title="Pipeline steps" hint="awaiting per-step telemetry">
+        <Section icon="cpu" title="Pipeline steps">
           <div className="state-line"><Icon.repeat size={15} /> Per-step status will appear as the workflow_job events arrive.</div>
         </Section>
       )}

@@ -13,49 +13,54 @@ const { getDb } = require('../../shared/db');
 const { config } = require('../../shared/config');
 const { deriveVerdict } = require('./verdict');
 
-// Real source inventory (counts are exact; names are a representative sample —
-// the live grid is generated wholesale from build_log_report.json each run, so
-// we deliberately do NOT maintain the full 196-name list here).
-const AGGREGATORS = ['IMF_IFS', 'IMF_WEO', 'IMF_GFS', 'IMF_IFS_HF', 'OECD_EO', 'OECD_MEI', 'OECD_NAAG',
-  'OECD_KEI', 'OECD_HPI', 'ECB', 'EUS', 'BIS', 'WDI', 'WB_GEM', 'UN', 'AMECO', 'BCEAO', 'CEPII',
-  'FRED_bonds', 'NSDP', 'Riksbank', 'SECMCA', 'Yahoo_eq_price', 'Yale_ICF_hist'];
-const COUNTRY = ['AGO_1', 'ARE_1', 'AUS_6', 'AUT_3', 'CAN_4', 'CHE_3', 'CHN_2', 'CIV_1', 'COL_1',
-  'CZE_1', 'DEU_7', 'DNK_2', 'ESP_1', 'EST_1', 'ETH_1', 'FIN_1', 'FRA_1', 'KEN_1', 'NGA_1', 'ZAF_1'];
-const COMBINE = ['CPI', 'nGDP', 'rGDP_pop', 'CA_USD', 'HPI', 'M0', 'M1', 'M2', 'M3', 'REER',
-  'cbrate', 'cons', 'exports', 'imports', 'infl', 'inv', 'ltrate', 'strate', 'unemp', 'eq_CAPE',
-  'cgovdebt_GDP', 'gen_govdebt_GDP', 'bond10y', 'bond2y', 'BankingCrisis'];
-
+// Exact category counts; names are a representative sample (the live grid is
+// generated wholesale from build_log_report.json each run, so we deliberately do
+// NOT maintain the full 196-name list here).
 const COUNTS = { aggregators: 34, country: 113, combine: 49 };
 
-function asSources(names, fail = []) {
-  return names.map((name) => ({ name, status: fail.includes(name) ? 'failed' : 'passed' }));
+function src(name, category, qc_flags = 0, over = {}) {
+  return { name, category, download: 'passed', clean: 'passed', qc_flags, ...over };
+}
+function vbl(name, qc_flags = 0, over = {}) {
+  return { name, combine: 'passed', qc_flags, ...over };
 }
 
-// Representative manifest — exact category counts, sampled real names, one
-// illustrative failure so the at-a-glance failure signal is visible.
+// Representative manifest in the two-matrix shape. Illustrates the common
+// "published with advisory QC flags" case: no hard download/clean/combine
+// failure (so the release ships), but a handful of deterministic QC flags to
+// review. QC is advisory and never blocks (see verdict.js). A few clean sample
+// rows are included so expanding "+N more" reveals real rows in the demo.
 function representativeManifest() {
-  const failName = 'ETH_1'; // illustrative only
-  const total = COUNTS.aggregators + COUNTS.country + COUNTS.combine;
+  const sources = [
+    src('BRA_2', 'country', 4),
+    src('OECD_EO', 'aggregator', 3),
+    src('NGA_1', 'country', 1),
+    src('IMF_IFS', 'aggregator'),
+    src('IMF_WEO', 'aggregator'),
+    src('AUS_6', 'country'),
+    src('DEU_7', 'country'),
+    src('FRA_1', 'country'),
+  ];
+  const variables = [
+    vbl('REER', 1),
+    vbl('CPI'),
+    vbl('nGDP'),
+    vbl('unemp'),
+  ];
+  const sources_total = COUNTS.aggregators + COUNTS.country;
+  const variables_total = COUNTS.combine;
+  const qc_flags =
+    sources.reduce((a, s) => a + s.qc_flags, 0) +
+    variables.reduce((a, v) => a + v.qc_flags, 0);
   return {
     representative: true,
     run_id: null,
     generated_at: null,
-    summary: { total, passed: total - 1, failed: 1, missing: 0, truncated: 0 },
-    stages: [
-      {
-        id: 'download', label: 'Download', plain: 'per-source fetch scripts',
-        groups: [
-          { id: 'aggregators', label: 'Aggregators', total: COUNTS.aggregators, sources: asSources(AGGREGATORS) },
-          { id: 'country', label: 'Country-level (NSO / central bank / SDMX)', total: COUNTS.country, sources: asSources(COUNTRY, [failName]) },
-        ],
-      },
-      {
-        id: 'combine', label: 'Combine', plain: 'per-variable chain-linking',
-        groups: [
-          { id: 'vars', label: 'Final variables', total: COUNTS.combine, sources: asSources(COMBINE) },
-        ],
-      },
-    ],
+    gated_stage: null,
+    counts: COUNTS,
+    summary: { sources_total, variables_total, failed: 0, qc_flags, gated_stage: null },
+    sources,
+    variables,
   };
 }
 

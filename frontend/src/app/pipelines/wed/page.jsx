@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, streamUrl } from '@/lib/api';
 import { Icon, StatusGlyph } from '@/components/Icon';
 import RunView from '@/components/wed/RunView';
+import VerdictHeader from '@/components/wed/VerdictHeader';
 import PipelineProgress from '@/components/wed/PipelineProgress';
 import SourceHealth from '@/components/wed/SourceHealth';
 import Spinner from '@/components/Spinner';
@@ -129,6 +130,8 @@ export default function WedPage() {
           <div className="nextrun"><Icon.calendar size={14} /> weekly · <span className="mono">Wed 02:00</span></div>
         </div>
       </div>
+
+      <VerdictHeader run={run} signal={tick} />
 
       {/* ── Workflow run — front and center ── */}
       {!realRun && (

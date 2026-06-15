@@ -21,33 +21,6 @@ function Section({ icon, title, hint, children }) {
   );
 }
 
-function RunHero({ run }) {
-  const st = run.state === 'failure' ? 'failed' : run.state === 'running' ? 'running' : 'passed';
-  const icon = st === 'failed' ? <Icon.x size={28} sw={2.4} /> : st === 'running' ? <Spinner size={26} color="var(--blue-fg)" /> : <Icon.check size={28} sw={2.4} />;
-  const title = st === 'failed' ? 'Latest build failed' : st === 'running' ? 'Build in progress' : 'Latest build succeeded';
-  const sub = st === 'failed'
-    ? <>Version <b className="mono">{run.version}</b> was <b>not published</b> — the log-parse gate caught a Stata error</>
-    : st === 'running'
-      ? <>Building <b className="mono">{run.version}</b> · running the Stata master pipeline</>
-      : <>Version <b className="mono">{run.version}</b> published to <b className="mono">wed-output-ap1</b>{run.finishedAt ? <> · finished <b>{relativeTime(run.finishedAt)}</b></> : null} · ran {fmtDuration(run.duration)}</>;
-  return (
-    <div className={`hero h-${st}`}>
-      <div className="hero-top">
-        <div className={`hero-icon hi-${st}`}>{icon}</div>
-        <div>
-          <div className="hero-headline">{title}</div>
-          <div className="hero-sub">{sub}</div>
-        </div>
-        <div className="hero-spacer" />
-        <div className="hero-right">
-          <span className={`sbadge s-${st}`}><span className="gl"><StatusGlyph status={st} size={13} /></span>{st === 'failed' ? 'Failed' : st === 'running' ? 'Running' : 'Succeeded'}</span>
-          <div className="nextrun"><Icon.calendar size={14} /> weekly · <span className="mono">Wed 02:00</span></div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function RunMetrics({ run }) {
   return (
     <div className="metrics">
@@ -300,7 +273,6 @@ export default function RunView({ run }) {
   const hasPhases = (run.phases || []).length > 0;
   return (
     <>
-      <RunHero run={run} />
       <RunMetrics run={run} />
 
       {hasPhases ? (

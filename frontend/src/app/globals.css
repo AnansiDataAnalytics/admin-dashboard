@@ -313,12 +313,6 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 /* pulsing dot for running */
 /* In-progress spinners are rendered by react-spinners (<Spinner>), not CSS. */
 
-/* Manual refresh button (WED page topbar). */
-.refresh-btn { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--text-2); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 6px 11px; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
-.refresh-btn:hover:not(:disabled) { background: var(--gray-bg); border-color: var(--text-3); color: var(--text); }
-.refresh-btn:disabled { opacity: .65; cursor: default; }
-.refresh-btn .ri { display: inline-flex; }
-
 /* ── Pipeline progress (live box heartbeat: download → clean → combine) ── */
 .pp-flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 4px; }
 .pp-stage-wrap { display: flex; align-items: center; gap: 4px; flex: 1 1 200px; }

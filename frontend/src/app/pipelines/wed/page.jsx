@@ -7,7 +7,6 @@ import RunView from '@/components/wed/RunView';
 import VerdictHeader from '@/components/wed/VerdictHeader';
 import PipelineProgress from '@/components/wed/PipelineProgress';
 import SourceHealth from '@/components/wed/SourceHealth';
-import Spinner from '@/components/Spinner';
 import ChangeExplorer, { ValueTransition, Delta } from '@/components/wed/ChangeExplorer';
 import { buildRepresentativeRun, runFromApi } from '@/lib/pipelineModel';
 import { fmtNum, fmtPct, isoDate, stateOf } from '@/lib/format';
@@ -24,15 +23,13 @@ export default function WedPage() {
   const [sources, setSources] = useState(null);
   const [srcFilter, setSrcFilter] = useState('');
   const [runDetail, setRunDetail] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [health, setHealth] = useState(null);
   const [healthErr, setHealthErr] = useState(null);
 
-  // Re-fetch the operational state (summary + ledger + runs). `quiet` skips the
-  // button's spinner state so SSE-driven refreshes don't flicker it — only the
-  // manual Refresh button shows the spinning feedback.
-  const refresh = useCallback(async ({ quiet = false } = {}) => {
-    if (!quiet) setRefreshing(true);
+  // Re-fetch the operational state (summary + ledger + runs). Called once on
+  // mount and again on each SSE `run` event; there is no manual refresh, so the
+  // page updates automatically as the pipeline reports progress.
+  const refresh = useCallback(async () => {
     // Source health drives the verdict header (fail-loud) — fetch and error-handle
     // it independently so a source-health outage doesn't blank the release section,
     // and so the header and the Source-health card share ONE request.
@@ -50,8 +47,6 @@ export default function WedPage() {
       setErr(null);
     } catch (e) {
       setErr(e.message);
-    } finally {
-      if (!quiet) setRefreshing(false);
     }
   }, []);
 
@@ -63,7 +58,7 @@ export default function WedPage() {
   useEffect(() => {
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
     const es = new EventSource(streamUrl);
-    es.addEventListener('run', () => { refresh({ quiet: true }); });
+    es.addEventListener('run', () => { refresh(); });
     // onerror is non-fatal: EventSource reconnects automatically (retry: 5000).
     return () => es.close();
   }, [refresh]);
@@ -129,10 +124,6 @@ export default function WedPage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="refresh-btn" onClick={() => refresh()} disabled={refreshing} title="Refresh now">
-            <span className="ri">{refreshing ? <Spinner size={13} /> : <Icon.repeat size={14} />}</span>
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
           <div className="nextrun"><Icon.calendar size={14} /> weekly · <span className="mono">Wed 02:00</span></div>
         </div>
       </div>

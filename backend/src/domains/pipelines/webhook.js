@@ -4,6 +4,17 @@ const crypto = require('crypto');
 const { config } = require('../../shared/config');
 const runs = require('./runs.service');
 
+// Constant-time string compare. Returns false on any missing value or length
+// mismatch (crypto.timingSafeEqual throws on unequal-length buffers), so callers
+// get a plain boolean and never leak timing about where two secrets diverge.
+// Shared by the webhook HMAC check and the heartbeat shared-secret check.
+function safeEqual(a, b) {
+  if (!a || !b) return false;
+  const x = Buffer.from(String(a));
+  const y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
 // Constant-time check of X-Hub-Signature-256 against the shared secret.
 function verifySignature(rawBody, signature) {
   if (!config.githubWebhookSecret || !signature || !rawBody) return false;
@@ -11,9 +22,7 @@ function verifySignature(rawBody, signature) {
     .createHmac('sha256', config.githubWebhookSecret)
     .update(rawBody)
     .digest('hex');
-  const a = Buffer.from(digest);
-  const b = Buffer.from(signature);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  return safeEqual(digest, signature);
 }
 
 async function handleEvent(eventType, payload) {
@@ -29,4 +38,4 @@ async function handleEvent(eventType, payload) {
   return { handled: 'ignored', event: eventType };
 }
 
-module.exports = { verifySignature, handleEvent };
+module.exports = { safeEqual, verifySignature, handleEvent };

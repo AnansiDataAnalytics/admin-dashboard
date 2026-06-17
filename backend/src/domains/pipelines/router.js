@@ -86,7 +86,7 @@ router.post('/wed/github/webhook', h(async (req, res) => {
 }));
 
 router.post('/wed/heartbeat', h(async (req, res) => {
-  if (!config.heartbeatSecret || req.get('X-Heartbeat-Secret') !== config.heartbeatSecret) {
+  if (!config.heartbeatSecret || !webhook.safeEqual(req.get('X-Heartbeat-Secret'), config.heartbeatSecret)) {
     return res.status(401).json({ error: 'invalid or missing heartbeat secret' });
   }
   await runs.mergeHeartbeat(req.body || {});

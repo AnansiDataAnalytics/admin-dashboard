@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { fmtNum, fmtDuration, fmtDateTime, relativeTime, toMs } from '@/lib/format';
 import { nextScheduledRunLabel, runStaleness } from '@/lib/schedule.mjs';
@@ -19,7 +20,12 @@ const STATE_META = {
   overdue:  { cls: 'v-overdue',  icon: 'alert', badge: 'Run overdue' },
 };
 
-export default function VerdictHeader({ run, health, err }) {
+export default function VerdictHeader({ run, health, err, collapsible = false, label }) {
+  // When `collapsible` (a build is currently running and shown separately), this
+  // last-finished verdict starts collapsed to its one-line headline. The page
+  // remounts this component when the active-run state flips (via `key`), so the
+  // default collapse is always correct while still letting the user toggle.
+  const [open, setOpen] = useState(!collapsible);
   // Fail loud: an error fetching status is an outage, not a healthy state.
   if (err) {
     return (
@@ -63,6 +69,7 @@ export default function VerdictHeader({ run, health, err }) {
   const stateKey = !live ? 'awaiting' : (stale?.overdue ? 'overdue' : v.state);
   const meta = STATE_META[stateKey] || STATE_META.blocked;
   const I = Icon[meta.icon] || Icon.check;
+  const showRows = !collapsible || open;
 
   const headline =
     !live ? 'Awaiting live run data — no run has reported yet'
@@ -74,9 +81,19 @@ export default function VerdictHeader({ run, health, err }) {
   return (
     <div className={`verdict ${meta.cls}`}>
       <div className="verdict-head">
+        {collapsible && (
+          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label="Toggle build details"
+                  style={{ background: 'none', border: 'none', padding: 0, marginRight: '2px', cursor: 'pointer', color: 'var(--text-3)', display: 'inline-flex' }}>
+            <span style={{ display: 'inline-flex', transition: 'transform .18s', transform: open ? 'rotate(90deg)' : 'none' }}><Icon.chevron size={15} /></span>
+          </button>
+        )}
         <span className="verdict-ico"><I size={22} /></span>
-        <div className="verdict-headline">{headline}{(live && (v.state === 'healthy' || v.state === 'flags')) ? cachedNote : ''}</div>
+        <div className="verdict-headline">
+          {label ? <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-3)', marginBottom: '2px' }}>{label}</span> : null}
+          {headline}{(live && (v.state === 'healthy' || v.state === 'flags')) ? cachedNote : ''}
+        </div>
       </div>
+      {showRows && (
       <div className="verdict-rows">
         <div className="vrow-k">Status</div>
         <div className="vrow-v"><span className="vbadge">{meta.badge}</span></div>
@@ -120,6 +137,7 @@ export default function VerdictHeader({ run, health, err }) {
         <div className="vrow-k">Next run</div>
         <div className="vrow-v mono">{nextScheduledRunLabel()}</div>
       </div>
+      )}
     </div>
   );
 }

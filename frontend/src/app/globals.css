@@ -595,3 +595,7 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .verdict.v-overdue { border-color: var(--amber-line); background: var(--amber-bg); }
 .v-overdue .verdict-ico { color: var(--amber-fg); }
 .v-overdue .vbadge { background: var(--amber-bg); color: var(--amber-fg); }
+/* running build — neutral/active blue (no pass/fail verdict yet) */
+.verdict.v-running { border-color: var(--blue-line); background: var(--blue-bg); }
+.v-running .verdict-ico { color: var(--blue-fg); }
+.v-running .vbadge { background: var(--blue-bg); color: var(--blue-fg); }

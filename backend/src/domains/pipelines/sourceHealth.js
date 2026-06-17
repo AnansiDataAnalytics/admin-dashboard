@@ -73,12 +73,18 @@ async function getSourceHealth() {
   // loud ("status unavailable") instead of showing a reassuring representative state.
   if (config.mongoUri) {
     const db = await getDb(config.metaDb);
+    // The verdict must reflect the last FINISHED build, not a partial in-progress
+    // one. A running build posts source_health via the heartbeat (and bumps
+    // updated_at), so without the finished_at gate its partial manifest could win
+    // the sort and paint a premature healthy/blocked verdict for a build that has
+    // not published. finished_at is set only on completion (upsertWorkflowRun),
+    // never by the heartbeat, so it is the reliable terminal marker; the
+    // in-progress build's live state is surfaced separately (PipelineProgress).
     // NB: findOne takes (filter, options) — projection AND sort must live in the
-    // SAME options object. Passing sort as a 3rd arg silently drops it, returning
-    // an arbitrary run. Sort by updated_at (the heartbeat always stamps it) so the
-    // most-recent run that carries source_health wins.
+    // SAME options object. Sort by updated_at so the most-recent FINISHED run that
+    // carries source_health wins.
     const run = await db.collection('pipeline_runs').findOne(
-      { source_health: { $exists: true } },
+      { source_health: { $exists: true }, finished_at: { $ne: null } },
       { projection: { _id: 0, run_id: 1, source_health: 1, updated_at: 1 }, sort: { updated_at: -1 } },
     );
     if (run && run.source_health) {

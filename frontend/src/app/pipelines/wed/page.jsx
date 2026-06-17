@@ -5,6 +5,7 @@ import { api, streamUrl } from '@/lib/api';
 import { Icon, StatusGlyph } from '@/components/Icon';
 import RunView from '@/components/wed/RunView';
 import VerdictHeader from '@/components/wed/VerdictHeader';
+import RunningHero from '@/components/wed/RunningHero';
 import PipelineProgress from '@/components/wed/PipelineProgress';
 import SourceHealth from '@/components/wed/SourceHealth';
 import ChangeExplorer, { ValueTransition, Delta } from '@/components/wed/ChangeExplorer';
@@ -23,6 +24,7 @@ export default function WedPage() {
   const [sources, setSources] = useState(null);
   const [srcFilter, setSrcFilter] = useState('');
   const [runDetail, setRunDetail] = useState(null);
+  const [selectedRunId, setSelectedRunId] = useState(null);
   const [health, setHealth] = useState(null);
   const [healthErr, setHealthErr] = useState(null);
 
@@ -63,13 +65,33 @@ export default function WedPage() {
     return () => es.close();
   }, [refresh]);
 
-  // Latest operational run's detail (jobs + steps) for the run view.
-  useEffect(() => {
-    if (!runs.length) { setRunDetail(null); return; }
-    let alive = true;
-    api.wedRun(runs[0].run_id).then((d) => { if (alive) setRunDetail(d); }).catch(() => {});
-    return () => { alive = false; };
+  // ── run selection ──────────────────────────────────────────────────────────
+  // Split the run list into the currently-running build (if any) and the most
+  // recent FINISHED build. The hero verdict reflects the last finished build; a
+  // running build is shown separately (front-and-center) so it never inherits the
+  // previous run's pass/fail color. Older builds are reachable via the run picker.
+  const { activeRun, lastFinishedRun } = useMemo(() => {
+    const isFinished = (r) => r.status === 'success' || r.status === 'failed' || !!r.finished_at;
+    return {
+      activeRun: runs.find((r) => !isFinished(r)) || null,
+      lastFinishedRun: runs.find(isFinished) || null,
+    };
   }, [runs]);
+
+  // Default the inspected run to the last finished build (else the active one);
+  // never clobber an explicit user pick.
+  useEffect(() => {
+    setSelectedRunId((cur) => cur ?? lastFinishedRun?.run_id ?? activeRun?.run_id ?? null);
+  }, [lastFinishedRun, activeRun]);
+
+  // Detail (jobs + steps + release join) for the run selected in the picker.
+  // Re-pulls on each SSE refresh so a selected in-flight run stays current.
+  useEffect(() => {
+    if (!selectedRunId) { setRunDetail(null); return; }
+    let alive = true;
+    api.wedRun(selectedRunId).then((d) => { if (alive) setRunDetail(d); }).catch(() => {});
+    return () => { alive = false; };
+  }, [selectedRunId, runs]);
 
   useEffect(() => {
     if (!version) return;
@@ -98,14 +120,20 @@ export default function WedPage() {
   const selected = releases?.find((r) => r.release_version === version) || null;
   const latest = summary?.latest || releases?.[0] || null;
 
-  // Prefer the real operational run; fall back to a representative one anchored
-  // to the latest release until live telemetry exists.
-  const realRun = useMemo(() => runFromApi(runDetail), [runDetail]);
+  // RunView-shaped objects. The heroes derive from the run-list items (live on
+  // every SSE refresh); the detail view uses the picker-selected run's full
+  // document. Fall back to a representative run anchored to the latest release
+  // until live telemetry exists.
+  const activeRunView = useMemo(() => runFromApi(activeRun), [activeRun]);
+  const lastFinishedView = useMemo(() => runFromApi(lastFinishedRun), [lastFinishedRun]);
+  const selectedRunView = useMemo(() => runFromApi(runDetail), [runDetail]);
   const repRun = useMemo(
     () => buildRepresentativeRun({ version: latest?.release_version, knownFrom: latest?.known_from }),
     [latest?.release_version, latest?.known_from],
   );
-  const run = realRun || repRun;
+  const heroRun = lastFinishedView || repRun;   // last recorded state → verdict banner
+  const detailRun = selectedRunView || repRun;  // picker-controlled detail view
+  const hasRuns = runs.length > 0;
 
   return (
     <div className="shell">
@@ -128,14 +156,23 @@ export default function WedPage() {
         </div>
       </div>
 
-      <VerdictHeader run={run} health={health} err={healthErr} />
+      {/* Last recorded state. When a build is running this collapses to its
+          one-line headline; the running build (below) is the front-and-center
+          hero. Remount on active-state flip so the default collapse is correct. */}
+      <VerdictHeader key={activeRunView ? 'collapsed' : 'full'} run={heroRun} health={health} err={healthErr}
+                     collapsible={!!activeRunView} label={activeRunView ? 'Last completed build' : null} />
+
+      {/* Currently-executing build, shown separately so it never borrows the last
+          build's color. Live intra-build progress sits directly under it. */}
+      {activeRunView && <RunningHero run={activeRunView} />}
+      {activeRunView && <PipelineProgress run={activeRunView} />}
 
       <Card icon="server" title="Source health">
         <SourceHealth health={health} err={healthErr} />
       </Card>
 
-      {/* ── Workflow run ── */}
-      {!realRun && (
+      {/* ── Workflow run detail — browse any run via the picker ── */}
+      {!hasRuns && (
         <div className="preview-banner">
           <span className="pb-ico"><Icon.bolt size={16} /></span>
           <div className="pb-text">
@@ -144,11 +181,16 @@ export default function WedPage() {
         </div>
       )}
 
-      <RunView run={run} db={summary?.db} />
+      {hasRuns && (
+        <div className="topbar" style={{ marginBottom: 14 }}>
+          <div className="brand-sub" style={{ fontSize: 13 }}>
+            Run detail{detailRun?.version && detailRun.version !== '—' ? <> · <span className="mono" style={{ color: 'var(--text)' }}>{detailRun.version}</span></> : null}
+          </div>
+          <RunPicker runs={runs} value={selectedRunId} onChange={setSelectedRunId} activeId={activeRun?.run_id} />
+        </div>
+      )}
 
-      {/* Live in-build progress from the box heartbeat — the only source of
-          intra-build state (webhooks are blind mid-job). */}
-      {realRun && <PipelineProgress run={realRun} />}
+      <RunView run={detailRun} db={summary?.db} />
 
       {/* ── Live release data & change tracking ── */}
       <div className="rsplit">
@@ -257,6 +299,64 @@ function ReleasePicker({ releases, value, onChange }) {
                   <div className="runrow-r">
                     <div className="runrow-num">{r.from_release ? `vs ${r.from_release}` : 'baseline'}</div>
                     <div className="runrow-dur">{r.from_release ? `${fmtNum(h.revision || 0)} rev` : `${fmtNum(r.change_summary?.points_seen || 0)} cells`}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────── run picker ─────────────────────────── */
+// Mirrors ReleasePicker: switches the run-detail view to any historical run.
+// Controls ONLY the detail RunView below — not the hero verdict or Source-health
+// card, which stay pinned to the last-recorded / currently-running system state.
+function RunPicker({ runs, value, onChange, activeId }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+  const label = (r) => r.release_version || (r.git_sha ? r.git_sha.slice(0, 7) : r.run_id);
+  const cur = runs.find((r) => r.run_id === value) || runs[0];
+  if (!cur) return null;
+  const curState = stateOf(cur.status);
+  return (
+    <div className={`runpick ${open ? 'open' : ''}`} ref={ref}>
+      <button className="runpick-btn" onClick={() => setOpen((o) => !o)}>
+        <span className={`flow-stat fs-${curState}`} style={{ width: 22, height: 22 }}><StatusGlyph status={curState} size={13} /></span>
+        <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
+          <div className="rp-num">{label(cur)}</div>
+          <div className="rp-meta">{cur.run_id === activeId ? 'running now' : isoDate(cur.started_at)}</div>
+        </div>
+        <span className="runpick-chevy"><Icon.chevron size={15} /></span>
+      </button>
+      {open && (
+        <div className="runpick-menu">
+          <div className="runpick-head">
+            <span>Workflow runs</span>
+            <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>{runs.length} runs</span>
+          </div>
+          <div className="runpick-list">
+            {runs.map((r) => {
+              const st = stateOf(r.status);
+              const active = r.run_id === value;
+              const tag = r.run_id === activeId ? 'running' : (r === runs[0] ? 'latest' : null);
+              return (
+                <button key={r.run_id} className={`runrow ${active ? 'active' : ''}`}
+                        onClick={() => { onChange(r.run_id); setOpen(false); }}>
+                  <span className={`flow-stat fs-${st}`} style={{ width: 20, height: 20 }}><StatusGlyph status={st} size={12} /></span>
+                  <div className="runrow-main">
+                    <span className="runrow-v">{label(r)}{tag && <span style={{ color: 'var(--text-3)', fontWeight: 500 }}> · {tag}</span>}</span>
+                    <span className="runrow-d">{isoDate(r.started_at)}</span>
+                  </div>
+                  <div className="runrow-r">
+                    <div className="runrow-num">{r.status}</div>
                   </div>
                 </button>
               );

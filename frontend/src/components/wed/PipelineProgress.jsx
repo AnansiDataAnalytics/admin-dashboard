@@ -6,8 +6,8 @@ import { fmtNum, relativeTime } from '@/lib/format';
 // Live "where are we in the Stata build" — fed by the box heartbeat
 // (ops/report_progress.py -> run.progress), which is the ONLY source of
 // intra-build progress (GitHub's workflow_job webhook is blind mid-job). Shows
-// the download -> clean -> combine sequence with per-source counts. Updates over
-// SSE; the page's Refresh button also re-pulls it.
+// the download -> clean -> combine sequence with per-source counts. Updates
+// over SSE (the page auto-refreshes on each push; there is no manual refresh).
 
 const STAGES = [
   { id: 'download', label: 'Download', plain: 'per-source fetch scripts' },

@@ -109,8 +109,8 @@ export function phasesWithSteps() {
 
 // ---- real run mapping (from the /runs telemetry) ---------------------------
 
-// GitHub step/job conclusion+status -> our visual state.
-function ghState(s) {
+// GitHub step/job conclusion+status -> our visual state. Exported for unit tests.
+export function ghState(s) {
   const c = (s.conclusion || '').toLowerCase();
   if (c === 'success') return 'passed';
   if (c === 'failure' || c === 'cancelled' || c === 'timed_out') return 'failed';
@@ -129,17 +129,26 @@ function durSecs(a, b) {
 
 // Map a GitHub step name onto a phase. Keyword-based so it's robust to exact
 // wording and GitHub's auto-added "Set up job" / "Post …" / "Complete job" steps.
+//
+// Order matters (first match wins) and is deliberately NOT the pipeline's
+// chronological order. Terminal cleanup actions ("Remove generated env_vars.do",
+// "Upload logs", "Post …") mention earlier-phase nouns (env_vars, logs), so they
+// must be matched by their action verb BEFORE the noun rules grab them; likewise
+// the log-scan gate ("Parse all Stata logs") must beat the build rule's "stata".
+// (Both were previously mislabelled — the gate landed under Build, "Upload logs"
+//  under Validate — until this reordering; see pipelineModel.test.mjs.)
 const PHASE_RULES = [
+  [/cleanup|remove|shred|upload log|complete job|post /, 'cleanup'],
   [/set up job|checkout|aws|credential|oidc|health check|version format/, 'setup'],
   [/env_vars|runtime_env|ensure (data )?director|secret/, 'configure'],
   [/pull|repo-inputs|acquire|input.*s3|s3.*input/, 'acquire'],
-  [/stata|master pipeline|permission|chmod/, 'build'],
   [/parse|\blog(s)?\b|validate|gate/, 'validate'],
+  [/stata|master pipeline|permission|chmod/, 'build'],
   [/push|publish|archive|output|mirror/, 'publish'],
   [/ingest|mongo|source health/, 'ingest'],
-  [/cleanup|remove|shred|upload log|complete job|post /, 'cleanup'],
 ];
-function inferPhase(name) {
+// Exported for unit tests.
+export function inferPhase(name) {
   const n = (name || '').toLowerCase();
   for (const [re, phase] of PHASE_RULES) if (re.test(n)) return phase;
   return 'cleanup';
@@ -167,7 +176,8 @@ function rollupReal(steps) {
 // at job start/end), and falling back to the controller's "Post …/Complete job"
 // steps is what made the run view show a misleading "cleanup, 13s". Live progress
 // during the build comes from the box heartbeat (run.progress), not from here.
-function pickBuildJob(jobs) {
+// Exported for unit tests.
+export function pickBuildJob(jobs) {
   const list = Object.values(jobs || {});
   if (!list.length) return null;
   const build = list.find((j) => /\bbuild\b/i.test(j.name || ''));

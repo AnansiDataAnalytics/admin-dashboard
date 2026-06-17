@@ -95,10 +95,7 @@ export default function VerdictHeader({ run, health, err }) {
             <div className="vrow-v">{fmtDuration(run?.duration)}</div>
 
             <div className="vrow-k">Trigger</div>
-            <div className="vrow-v">{manual ? 'Manual dispatch' : 'Scheduled'}<span className="muted"> · {run?.actor || (manual ? 'j.okafor' : 'github-actions[bot]')}</span></div>
-
-            <div className="vrow-k">Runner</div>
-            <div className="vrow-v">self-hosted · wed <span className="muted">· ap-southeast-1</span></div>
+            <div className="vrow-v">{manual ? 'Manual dispatch' : 'Scheduled'}<span className="muted"> · {run?.actor || 'unknown'}</span></div>
 
             {run?.html_url ? (
               <>

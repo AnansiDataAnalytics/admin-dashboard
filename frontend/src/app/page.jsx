@@ -72,7 +72,7 @@ export default function Home() {
           <div className="t-next-big">
             {nextWed ? <>{nextWed.day}<small> {nextWed.mon}</small></> : <>—</>}
           </div>
-          <div className="t-next-sub">{nextWed ? `${nextWed.weekday} 02:00 · self-hosted/wed` : 'weekly cadence'}</div>
+          <div className="t-next-sub">{nextWed ? `${nextWed.weekday} 02:00` : 'weekly cadence'}</div>
         </div>
 
         {/* Current release */}

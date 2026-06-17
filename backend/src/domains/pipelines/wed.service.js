@@ -27,7 +27,9 @@ async function getSummary() {
     c.find({}, { projection: { _id: 0 } }).sort({ known_from: -1 }).limit(1).next(),
     c.countDocuments({ status: 'completed' }),
   ]);
-  return { total_releases: total, completed_releases: completed, latest: latest || null };
+  // `db` surfaces the configured WED ledger DB (wed_v0 prod / wed_staging) so the
+  // frontend can label its source instead of hardcoding a guess.
+  return { total_releases: total, completed_releases: completed, latest: latest || null, db: config.wedDb };
 }
 
 // Typed change events for a release (the granular "what moved"), filter+paginate.

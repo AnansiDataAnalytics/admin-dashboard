@@ -104,7 +104,7 @@ function PhaseGroup({ phase, openDefault }) {
   );
 }
 
-function RunDetails({ run }) {
+function RunDetails({ run, db }) {
   const failed = run.state === 'failure';
   return (
     <div>
@@ -139,7 +139,7 @@ function RunDetails({ run }) {
             <div className="artifact">
               <span className="artifact-ico"><Icon.layers size={16} /></span>
               <div className="artifact-main">
-                <div className="artifact-name">wed_staging · {run.version}</div>
+                <div className="artifact-name">{db || '—'} · {run.version}</div>
                 <div className="artifact-sub">release sealed · change events emitted</div>
               </div>
               <div className="artifact-when">{run.finishedAt ? fmtDateTime(run.finishedAt) : '—'}</div>
@@ -154,19 +154,19 @@ function RunDetails({ run }) {
           <Icon.arrowRight size={14} /><span>build</span>
           <Icon.arrowRight size={14} /><span className="mono" style={{ fontSize: 11.5 }}>wed-output-ap1</span>
           <Icon.arrowRight size={14} /><span>ingest</span>
-          <Icon.arrowRight size={14} /><span className="mono" style={{ fontSize: 11.5 }}>wed_staging</span>
+          <Icon.arrowRight size={14} /><span className="mono" style={{ fontSize: 11.5 }}>{db || '—'}</span>
         </div>
       </div>
     </div>
   );
 }
 
-export default function RunView({ run }) {
+export default function RunView({ run, db }) {
   const hasPhases = (run.phases || []).length > 0;
   return (
     <>
       <Section icon="cloud" title="Outputs &amp; artifacts">
-        <RunDetails run={run} />
+        <RunDetails run={run} db={db} />
       </Section>
 
       {hasPhases ? (

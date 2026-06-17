@@ -82,7 +82,7 @@ export default function Home() {
             <div className="t-release-v">{latest?.release_version || '—'}</div>
           </div>
           <div className="tile-k" style={{ textAlign: 'right' }}>
-            {summary ? `${summary.total_releases} tracked` : 'wed_staging'}
+            {summary ? `${summary.total_releases} tracked` : '—'}
           </div>
         </div>
 

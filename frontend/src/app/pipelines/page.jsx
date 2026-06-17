@@ -67,7 +67,7 @@ export default function Pipelines() {
             <div className="pipe-kv">
               <div className="k">Version</div>
               <div className="v mono">{latest?.release_version || '—'}</div>
-              <div className="sub">{cs ? `${fmtNum(cs.points_seen)} cells` : 'wed_staging'}</div>
+              <div className="sub">{cs ? `${fmtNum(cs.points_seen)} cells` : '—'}</div>
             </div>
             <div className="pipe-kv">
               <div className="k">Releases tracked</div>

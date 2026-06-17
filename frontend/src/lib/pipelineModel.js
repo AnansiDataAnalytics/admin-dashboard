@@ -58,7 +58,7 @@ export const WED_STEPS = [
     note: 'Per-version backup to s3://wed-archive-ap1/2026_06.',
     log: 'archived clean_data_wide.dta + run_report.json' },
   { phase: 'ingest', name: 'Ingest to MongoDB staging', dur: 300, condition: 'if: success()',
-    note: 'bulk_import_sequential.py --masked → wed_staging; seals the release ledger + change events.',
+    note: 'bulk_import_sequential.py --masked → MongoDB; seals the release ledger + change events.',
     log: 'sealed release 2026_06 · +3,922 cells · 142,837 revised' },
   { phase: 'cleanup', name: 'Remove generated env_vars.do', dur: 1, condition: 'if: always()',
     note: 'Secrets file is always shredded, pass or fail.' },

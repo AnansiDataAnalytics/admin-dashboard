@@ -144,7 +144,7 @@ export default function WedPage() {
         </div>
       )}
 
-      <RunView run={run} />
+      <RunView run={run} db={summary?.db} />
 
       {/* Live in-build progress from the box heartbeat — the only source of
           intra-build state (webhooks are blind mid-job). */}
@@ -160,7 +160,7 @@ export default function WedPage() {
       {err && (
         <div className="state-line err">
           <Icon.alert size={16} /> Backend unreachable: {err}
-          <span className="state-hint" style={{ marginLeft: 8 }}>Is the backend running with <span className="mono">MONGODB_URI</span> → <span className="mono">wed_staging</span>?</span>
+          <span className="state-hint" style={{ marginLeft: 8 }}>Is the backend running with <span className="mono">MONGODB_URI</span> → <span className="mono">{summary?.db || 'the configured WED DB'}</span>?</span>
         </div>
       )}
       {!err && !releases && <div className="state-line"><Icon.repeat size={16} /> Loading release ledger…</div>}
@@ -208,7 +208,7 @@ export default function WedPage() {
         <span className="dot-sep" />
         release <span className="mono">{version || '—'}</span>
         <span className="dot-sep" />
-        source <span className="mono">{releases ? 'wed_staging' : '—'}</span>
+        source <span className="mono">{summary?.db || '—'}</span>
       </div>
     </div>
   );

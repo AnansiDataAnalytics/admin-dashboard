@@ -584,6 +584,7 @@ a.tile:hover { transform: translateY(-3px); border-color: var(--border-strong); 
 .mx-failed { color: var(--red-fg); display: inline-grid; place-items: center; }
 .mx-flag { color: var(--amber-fg); }
 .mx-skip { color: var(--text-3); }
+.mx-fallback { color: var(--blue-fg); }  /* used cached/last-good data — neutral, non-blocking */
 .mx-more { width: 100%; text-align: center; border: none; border-top: 1px solid var(--border); background: var(--surface-inset); color: var(--text-2); font-size: 11.5px; padding: 9px; cursor: pointer; font-family: var(--font-ui); }
 .mx-more:hover { background: var(--surface-2); }
 

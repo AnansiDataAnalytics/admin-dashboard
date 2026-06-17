@@ -47,8 +47,12 @@ export default function VerdictHeader({ run, health, err }) {
   }
 
   const live = !health.representative;
-  const v = health.verdict || { state: 'blocked', qc_flags: 0, gated_stage: null };
+  const v = health.verdict || { state: 'blocked', qc_flags: 0, fallback: 0, gated_stage: null };
   const s = health.summary || {};
+  const fallback = Number(v.fallback ?? s.fallback) || 0;
+  // Gentle, non-alarming note — a routine outcome that grows more common as more
+  // sources are added; a published run with a few fallbacks is NOT low-quality.
+  const cachedNote = fallback > 0 ? ` · ${fmtNum(fallback)} source${fallback === 1 ? '' : 's'} on cached data` : '';
   const version = run?.version || '—';
   const manual = run?.triggeredManually;
   const gatedLabel = STAGE_LABEL[v.gated_stage] || v.gated_stage;
@@ -71,7 +75,7 @@ export default function VerdictHeader({ run, health, err }) {
     <div className={`verdict ${meta.cls}`}>
       <div className="verdict-head">
         <span className="verdict-ico"><I size={22} /></span>
-        <div className="verdict-headline">{headline}</div>
+        <div className="verdict-headline">{headline}{(live && (v.state === 'healthy' || v.state === 'flags')) ? cachedNote : ''}</div>
       </div>
       <div className="verdict-rows">
         <div className="vrow-k">Status</div>
@@ -104,7 +108,7 @@ export default function VerdictHeader({ run, health, err }) {
             ) : null}
 
             <div className="vrow-k">Checks</div>
-            <div className="vrow-v">{fmtNum(s.sources_total)} sources · {fmtNum(s.variables_total)} variables · <b>{fmtNum(v.qc_flags)} QC flags</b></div>
+            <div className="vrow-v">{fmtNum(s.sources_total)} sources · {fmtNum(s.variables_total)} variables · <b>{fmtNum(v.qc_flags)} QC flags</b>{fallback > 0 ? <> · <span className="muted">{fmtNum(fallback)} on cached data</span></> : null}</div>
 
             <div className="vrow-k">Data as of</div>
             <div className="vrow-v">{lastRunMs ? <>{fmtDateTime(lastRunMs)} <span className="muted">· {relativeTime(lastRunMs, nowMs)}</span></> : <span className="muted">unknown</span>}</div>

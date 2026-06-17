@@ -13,6 +13,7 @@ import { STAGE_LABEL } from '@/lib/pipelineModel';
 
 function StageCell({ status }) {
   if (status === 'failed') return <span className="mx-cell mx-failed"><Icon.x size={13} /></span>;
+  if (status === 'fallback') return <span className="mx-cell mx-fallback" title="used cached (last-good) data">◌</span>;
   if (status === 'not_reached') return <span className="mx-cell mx-skip">—</span>;
   return <span className="mx-cell mx-ok">●</span>;
 }
@@ -23,12 +24,18 @@ function QcCell({ flags }) {
 function attention(row, stageKeys) {
   return stageKeys.some((k) => row[k] === 'failed') || (row.qc_flags || 0) > 0;
 }
+// A source that fell back to last-good/cached data — shown plainly (neutral),
+// never in the red "need attention" group; a normal, non-blocking outcome.
+function usedFallback(row, stageKeys) {
+  return stageKeys.some((k) => row[k] === 'fallback');
+}
 
 function Matrix({ title, sub, unit, stageKeys, rows, total }) {
   const [open, setOpen] = useState(false);
   const flagged = rows.filter((r) => attention(r, stageKeys));
-  const clean = rows.filter((r) => !attention(r, stageKeys));
-  const allClear = flagged.length === 0;
+  const fallbackRows = rows.filter((r) => !attention(r, stageKeys) && usedFallback(r, stageKeys));
+  const clean = rows.filter((r) => !attention(r, stageKeys) && !usedFallback(r, stageKeys));
+  const allClear = flagged.length === 0 && fallbackRows.length === 0;
   const moreCount = clean.length; // count the "+N more" expander will actually reveal (== total − flagged for live data)
   const notReached = rows.filter((r) => stageKeys.some((k) => r[k] === 'not_reached')).length;
   const cols = `1fr repeat(${stageKeys.length + 1}, 88px)`;
@@ -46,7 +53,7 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
       <button className="mx-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="mx-chev" data-open={open}><Icon.chevron size={15} /></span>
         <span className="mx-title">{title}{sub ? <span className="mx-sub"> {sub}</span> : null}</span>
-        <span className="mx-meta">{fmtNum(total)} {unit}{allClear ? ' · all clear' : ` · ${fmtNum(flagged.length)} need attention`}{notReached > 0 ? ` · ${fmtNum(notReached)} not reached` : ''}</span>
+        <span className="mx-meta">{fmtNum(total)} {unit}{flagged.length > 0 ? ` · ${fmtNum(flagged.length)} need attention` : ''}{fallbackRows.length > 0 ? ` · ${fmtNum(fallbackRows.length)} on cached data` : ''}{notReached > 0 ? ` · ${fmtNum(notReached)} not reached` : ''}{allClear && notReached === 0 ? ' · all clear' : ''}</span>
       </button>
 
       <div className="mx-colhead" style={{ gridTemplateColumns: cols }}>
@@ -56,6 +63,7 @@ function Matrix({ title, sub, unit, stageKeys, rows, total }) {
       </div>
 
       {flagged.map(Row)}
+      {fallbackRows.map(Row)}
       {open ? (
         <>
           {clean.map(Row)}

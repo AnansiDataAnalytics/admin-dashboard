@@ -38,7 +38,7 @@ function representativeManifest() {
     src('IMF_IFS', 'aggregator'),
     src('IMF_WEO', 'aggregator'),
     src('AUS_6', 'country'),
-    src('DEU_7', 'country'),
+    src('DEU_7', 'country', 0, { download: 'fallback' }),
     src('FRA_1', 'country'),
   ];
   const variables = [
@@ -52,13 +52,14 @@ function representativeManifest() {
   const qc_flags =
     sources.reduce((a, s) => a + s.qc_flags, 0) +
     variables.reduce((a, v) => a + v.qc_flags, 0);
+  const fallback = sources.filter((s) => s.download === 'fallback').length;
   return {
     representative: true,
     run_id: null,
     generated_at: null,
     gated_stage: null,
     counts: COUNTS,
-    summary: { sources_total, variables_total, failed: 0, qc_flags, gated_stage: null },
+    summary: { sources_total, variables_total, failed: 0, fallback, qc_flags, systemic: false, gated_stage: null },
     sources,
     variables,
   };

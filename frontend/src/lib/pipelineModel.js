@@ -186,6 +186,55 @@ export function pickBuildJob(jobs) {
   return notInfra[0] || list.slice().sort((a, b) => (b.steps?.length || 0) - (a.steps?.length || 0))[0];
 }
 
+// ---- hero verdict (run-centric) --------------------------------------------
+// Describes the RUN, not the data: only a build that finished and loaded into
+// staging is "done"; every other outcome names the phase where it halted. Source
+// health only refines a *successful* run into clean-vs-flags. Pure + tested.
+//
+// Compact, news-style headlines keyed on the halt phase (see HALT_HEADLINE), with
+// the phase taken from the first failed step (already phase-tagged via inferPhase).
+export const HALT_HEADLINE = {
+  setup:     'Build stopped in setup — nothing processed',
+  configure: 'Build stopped in setup — nothing processed',
+  acquire:   'Build failed fetching inputs from S3',
+  build:     'Build failed in the Stata pipeline',
+  validate:  'Validation gate caught log errors — nothing loaded',
+  publish:   'Built, but S3 upload failed',
+  ingest:    'Built, but staging load failed',
+  cleanup:   'Build failed after loading',
+};
+
+// The phase a failed run halted in = the first failed step's phase.
+export function haltPhase(run) {
+  const failed = (run?.steps || []).find((s) => s.status === 'failed');
+  return failed ? failed.phase : null;
+}
+
+export function deriveHeroVerdict(run, health, { overdue = false } = {}) {
+  if (!run || run.representative) {
+    return overdue
+      ? { state: 'overdue', headline: 'No build has reported — overdue', phase: null }
+      : { state: 'awaiting', headline: 'Awaiting the first live build', phase: null };
+  }
+  if (run.state === 'running' || run.state === 'queued') {
+    return { state: 'running', headline: run.state === 'queued' ? 'Weekly build queued' : 'Weekly build running', phase: null };
+  }
+  if (run.state === 'failure') {
+    const phase = haltPhase(run);
+    return { state: 'blocked', headline: HALT_HEADLINE[phase] || 'Build failed', phase };
+  }
+  // success — reached & passed Ingest-to-MongoDB. Source health refines flags.
+  const flags = Number(health?.verdict?.qc_flags ?? health?.summary?.qc_flags) || 0;
+  return flags > 0
+    ? { state: 'flags', headline: `Loaded into staging — ${flags} QC flag${flags === 1 ? '' : 's'} to review`, phase: 'ingest', qc_flags: flags }
+    : { state: 'healthy', headline: 'New data loaded into staging', phase: 'ingest' };
+}
+
+// Display name for a phase id (for badges/strips), from the canonical phase list.
+export function phaseName(id) {
+  return (WED_PHASES.find((p) => p.id === id) || {}).name || id || '';
+}
+
 // Build a RunView-shaped object from a real /runs/:id document.
 export function runFromApi(run) {
   if (!run) return null;

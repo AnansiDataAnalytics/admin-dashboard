@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { inferPhase, ghState, pickBuildJob, runFromApi, WED_STEPS } from './pipelineModel.js';
+import { inferPhase, ghState, pickBuildJob, runFromApi, WED_STEPS, deriveHeroVerdict, haltPhase } from './pipelineModel.js';
 
 // ── inferPhase ──────────────────────────────────────────────────────────────
 // Regression table: every real workflow step name (mirrored from wed.yml in
@@ -120,4 +120,40 @@ test('runFromApi version falls back to a short git sha', () => {
 test('runFromApi reads the manual-dispatch trigger', () => {
   assert.equal(runFromApi({ run_id: '1', status: 'success', trigger: 'manual' }).triggeredManually, true);
   assert.equal(runFromApi({ run_id: '1', status: 'success', trigger: 'scheduled' }).triggeredManually, false);
+});
+
+// ── deriveHeroVerdict (run-centric) ───────────────────────────────────────────
+const failedAt = (phase) => ({ state: 'failure', steps: [{ phase: 'setup', status: 'passed' }, { phase, status: 'failed' }] });
+
+test('deriveHeroVerdict: success with no flags → loaded into staging', () => {
+  const v = deriveHeroVerdict({ state: 'success' }, { verdict: { qc_flags: 0 } });
+  assert.equal(v.state, 'healthy');
+  assert.match(v.headline, /loaded into staging/i);
+});
+test('deriveHeroVerdict: success with QC flags → flags state, count in headline', () => {
+  const v = deriveHeroVerdict({ state: 'success' }, { verdict: { qc_flags: 3 } });
+  assert.equal(v.state, 'flags');
+  assert.match(v.headline, /3 QC flags/);
+});
+test('deriveHeroVerdict: failure maps to the halt phase headline (the live case)', () => {
+  const v = deriveHeroVerdict(failedAt('validate'), null);
+  assert.equal(v.state, 'blocked');
+  assert.equal(v.phase, 'validate');
+  assert.match(v.headline, /validation gate/i);
+});
+test('deriveHeroVerdict: failure phase drives the headline (acquire vs publish)', () => {
+  assert.match(deriveHeroVerdict(failedAt('acquire'), null).headline, /fetching inputs/i);
+  assert.match(deriveHeroVerdict(failedAt('publish'), null).headline, /S3 upload/i);
+  assert.match(deriveHeroVerdict(failedAt('ingest'), null).headline, /staging load/i);
+});
+test('deriveHeroVerdict: representative/no run → awaiting, or overdue when flagged', () => {
+  assert.equal(deriveHeroVerdict({ representative: true }, null).state, 'awaiting');
+  assert.equal(deriveHeroVerdict(null, null, { overdue: true }).state, 'overdue');
+});
+test('deriveHeroVerdict: in-progress run → running', () => {
+  assert.equal(deriveHeroVerdict({ state: 'running' }, null).state, 'running');
+});
+test('haltPhase returns the first failed step phase, else null', () => {
+  assert.equal(haltPhase(failedAt('build')), 'build');
+  assert.equal(haltPhase({ steps: [{ phase: 'setup', status: 'passed' }] }), null);
 });

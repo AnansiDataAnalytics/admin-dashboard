@@ -3,80 +3,64 @@ import { useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { fmtNum, fmtDuration, fmtDateTime, relativeTime, toMs } from '@/lib/format';
 import { nextScheduledRunLabel, runStaleness } from '@/lib/schedule.mjs';
-import { STAGE_LABEL } from '@/lib/pipelineModel';
+import { deriveHeroVerdict, phaseName } from '@/lib/pipelineModel';
 
-// The single operator-facing status, reconciled to real execution truth AND to
-// liveness. Driven by `health` (the source-health payload, fetched once in the
-// page) and `err` (a fetch outage). Trust rules:
-//   • a fetch error is an OUTAGE → red "unavailable" (never a green fallback);
-//   • representative data (no live run yet) → neutral "awaiting", NOT a confident
-//     healthy/flags/blocked verdict;
-//   • live data whose latest scheduled run never arrived → amber "overdue".
+// Operator-facing summary of the LAST finished build — RUN-centric: it describes
+// the run (a build only "loads into staging" when it reaches the final ingest
+// step), not the data/release. Driven by `run` (the last finished run, with
+// phase-tagged steps) reconciled with `health` (source-health, for the QC-flag
+// count on a successful run). `err` is a backend outage → fail loud.
+//
+// Visual hierarchy: the headline is the focal point; Build / when / duration are
+// the primary facts; trigger / checks / freshness / schedule are secondary. A
+// running build is shown separately (RunningHero); here we only describe finished.
 const STATE_META = {
-  healthy:  { cls: 'v-healthy',  icon: 'check', badge: 'Published' },
-  flags:    { cls: 'v-flags',    icon: 'alert', badge: 'Published · review flags' },
-  blocked:  { cls: 'v-blocked',  icon: 'x',     badge: 'Failed' },
-  awaiting: { cls: 'v-awaiting', icon: 'clock', badge: 'No live run' },
-  overdue:  { cls: 'v-overdue',  icon: 'alert', badge: 'Run overdue' },
+  healthy:  { cls: 'v-healthy',  icon: 'check',  badge: 'Finished' },
+  flags:    { cls: 'v-flags',    icon: 'alert',  badge: 'Finished · flags' },
+  blocked:  { cls: 'v-blocked',  icon: 'x',      badge: 'Build failed' },
+  awaiting: { cls: 'v-awaiting', icon: 'clock',  badge: 'No build yet' },
+  overdue:  { cls: 'v-overdue',  icon: 'alert',  badge: 'Overdue' },
+  running:  { cls: 'v-running',  icon: 'repeat', badge: 'Running' },
 };
 
 export default function VerdictHeader({ run, health, err, collapsible = false, label }) {
-  // When `collapsible` (a build is currently running and shown separately), this
-  // last-finished verdict starts collapsed to its one-line headline. The page
-  // remounts this component when the active-run state flips (via `key`), so the
-  // default collapse is always correct while still letting the user toggle.
+  // When `collapsible` (a build is running and shown separately) this last-finished
+  // summary starts collapsed to its headline. The page remounts on active-state
+  // flip (via key) so the default is right, while letting the user toggle.
   const [open, setOpen] = useState(!collapsible);
-  // Fail loud: an error fetching status is an outage, not a healthy state.
+
+  // Fail loud: a fetch error is an outage, not a healthy state.
   if (err) {
     return (
       <div className="verdict v-blocked">
         <div className="verdict-head">
-          <span className="verdict-ico"><Icon.alert size={20} /></span>
+          <span className="verdict-ico"><Icon.alert size={22} /></span>
           <div className="verdict-headline">Status unavailable — backend unreachable</div>
         </div>
-        <div className="verdict-rows">
+        <div className="verdict-secondary">
           <div className="vrow-k">Error</div><div className="vrow-v">{err}</div>
           <div className="vrow-k">Next run</div><div className="vrow-v mono">{nextScheduledRunLabel()}</div>
         </div>
       </div>
     );
   }
-  if (!health) {
-    return (
-      <div className="verdict">
-        <div className="verdict-head">
-          <span className="verdict-ico"><Icon.repeat size={20} /></span>
-          <div className="verdict-headline">Loading build status…</div>
-        </div>
-      </div>
-    );
-  }
 
-  const live = !health.representative;
-  const v = health.verdict || { state: 'blocked', qc_flags: 0, fallback: 0, gated_stage: null };
-  const s = health.summary || {};
-  const fallback = Number(v.fallback ?? s.fallback) || 0;
-  // Gentle, non-alarming note — a routine outcome that grows more common as more
-  // sources are added; a published run with a few fallbacks is NOT low-quality.
-  const cachedNote = fallback > 0 ? ` · ${fmtNum(fallback)} source${fallback === 1 ? '' : 's'} on cached data` : '';
-  const version = run?.version || '—';
-  const manual = run?.triggeredManually;
-  const gatedLabel = STAGE_LABEL[v.gated_stage] || v.gated_stage;
-  const lastRunMs = toMs(health.generated_at);
+  const live = !!run && !run.representative;        // a real finished run to describe
+  const s = health?.summary || {};
+  const fallback = Number(health?.verdict?.fallback ?? s.fallback) || 0;
   const nowMs = Date.now();
-  const stale = live ? runStaleness({ lastRunMs, nowMs }) : null;
+  const lastRunMs = run?.finishedAt || toMs(health?.generated_at);
+  const overdue = live ? !!runStaleness({ lastRunMs, nowMs }).overdue : false;
 
-  const stateKey = !live ? 'awaiting' : (stale?.overdue ? 'overdue' : v.state);
-  const meta = STATE_META[stateKey] || STATE_META.blocked;
+  const verdict = deriveHeroVerdict(run, health, { overdue });
+  const meta = STATE_META[verdict.state] || STATE_META.blocked;
   const I = Icon[meta.icon] || Icon.check;
+  const badge = verdict.state === 'blocked' && verdict.phase ? `Stopped at ${phaseName(verdict.phase)}` : meta.badge;
   const showRows = !collapsible || open;
 
-  const headline =
-    !live ? 'Awaiting live run data — no run has reported yet'
-    : stale?.overdue ? `Run overdue — last update ${lastRunMs ? relativeTime(lastRunMs, nowMs) : 'never'}`
-    : v.state === 'blocked' ? (v.gated_stage ? `Build failed — halted at ${gatedLabel}` : 'Build failed — release blocked')
-    : v.state === 'flags' ? `Published with ${fmtNum(v.qc_flags)} QC flag${v.qc_flags === 1 ? '' : 's'} to review`
-    : `Published & healthy — ${version} is live`;
+  const version = run?.version || '—';
+  const phases = run?.phases || [];
+  const qcFlags = verdict.qc_flags || Number(s.qc_flags) || 0;
 
   return (
     <div className={`verdict ${meta.cls}`}>
@@ -87,56 +71,69 @@ export default function VerdictHeader({ run, health, err, collapsible = false, l
             <span style={{ display: 'inline-flex', transition: 'transform .18s', transform: open ? 'rotate(90deg)' : 'none' }}><Icon.chevron size={15} /></span>
           </button>
         )}
-        <span className="verdict-ico"><I size={22} /></span>
+        <span className="verdict-ico"><I size={24} /></span>
         <div className="verdict-headline">
-          {label ? <span style={{ display: 'block', fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-3)', marginBottom: '2px' }}>{label}</span> : null}
-          {headline}{(live && (v.state === 'healthy' || v.state === 'flags')) ? cachedNote : ''}
+          {label ? <span className="verdict-eyebrow">{label}</span> : null}
+          {verdict.headline}
         </div>
+        <span className="vbadge">{badge}</span>
       </div>
-      {showRows && (
-      <div className="verdict-rows">
-        <div className="vrow-k">Status</div>
-        <div className="vrow-v"><span className="vbadge">{meta.badge}</span></div>
 
-        {live ? (
-          <>
-            <div className="vrow-k">Version</div>
-            <div className="vrow-v mono">{version}{v.state === 'blocked' ? <span className="muted"> · not published</span> : null}</div>
+      {showRows && live && (
+        <>
+          {/* the parts: each phase of the run at a glance, halt highlighted */}
+          {phases.length > 0 && (
+            <div className="phase-strip">
+              {phases.map((p) => (
+                <span key={p.id} className={`phase-pip pp-${p.status}`} title={p.plain || p.name}>{p.name}</span>
+              ))}
+            </div>
+          )}
 
-            <div className="vrow-k">{run?.finishedAt ? 'Finished' : 'Started'}</div>
-            <div className="vrow-v">{run?.finishedAt
-              ? <>{fmtDateTime(run.finishedAt)} <span className="muted">· {relativeTime(run.finishedAt, nowMs)}</span></>
-              : (run?.startedAt ? <>{fmtDateTime(run.startedAt)} <span className="muted">· running</span></> : 'in progress')}</div>
+          {/* primary facts */}
+          <div className="verdict-primary">
+            <div className="vp-item">
+              <span className="vp-k">Build</span>
+              <span className="vp-v mono">{run?.html_url
+                ? <a href={run.html_url} target="_blank" rel="noreferrer">{version} <span className="vp-ext">↗</span></a>
+                : version}</span>
+            </div>
+            <div className="vp-item">
+              <span className="vp-k">{run?.finishedAt ? 'Finished' : 'Started'}</span>
+              <span className="vp-v">{run?.finishedAt
+                ? <>{fmtDateTime(run.finishedAt)} <span className="muted">· {relativeTime(run.finishedAt, nowMs)}</span></>
+                : (run?.startedAt ? <>{fmtDateTime(run.startedAt)} <span className="muted">· running</span></> : 'in progress')}</span>
+            </div>
+            <div className="vp-item">
+              <span className="vp-k">Duration</span>
+              <span className="vp-v">{fmtDuration(run?.duration)}</span>
+            </div>
+          </div>
 
-            <div className="vrow-k">Duration</div>
-            <div className="vrow-v">{fmtDuration(run?.duration)}</div>
-
+          {/* secondary facts */}
+          <div className="verdict-secondary">
             <div className="vrow-k">Trigger</div>
-            <div className="vrow-v">{manual ? 'Manual dispatch' : 'Scheduled'}<span className="muted"> · {run?.actor || 'unknown'}</span></div>
-
-            {run?.html_url ? (
-              <>
-                <div className="vrow-k">Workflow run</div>
-                <div className="vrow-v"><a href={run.html_url} target="_blank" rel="noreferrer" style={{ color: 'var(--blue-fg)', textDecoration: 'none' }}>View on GitHub ↗</a></div>
-              </>
-            ) : null}
+            <div className="vrow-v">{run?.triggeredManually ? 'Manual dispatch' : 'Scheduled'}<span className="muted"> · {run?.actor || 'unknown'}</span></div>
 
             <div className="vrow-k">Checks</div>
-            <div className="vrow-v">{fmtNum(s.sources_total)} sources · {fmtNum(s.variables_total)} variables · <b>{fmtNum(v.qc_flags)} QC flags</b>{fallback > 0 ? <> · <span className="muted">{fmtNum(fallback)} on cached data</span></> : null}</div>
+            <div className="vrow-v">{s.sources_total ? <>{fmtNum(s.sources_total)} sources · </> : null}{fmtNum(s.variables_total)} variables · <b>{fmtNum(qcFlags)} QC flags</b>{fallback > 0 ? <> · <span className="muted">{fmtNum(fallback)} on cached data</span></> : null}</div>
 
-            <div className="vrow-k">Data as of</div>
-            <div className="vrow-v">{lastRunMs ? <>{fmtDateTime(lastRunMs)} <span className="muted">· {relativeTime(lastRunMs, nowMs)}</span></> : <span className="muted">unknown</span>}</div>
-          </>
-        ) : (
-          <>
-            <div className="vrow-k">Live data</div>
-            <div className="vrow-v"><span className="muted">none yet — the breakdown below is a representative example</span></div>
-          </>
-        )}
+            <div className="vrow-k">Source data as of</div>
+            <div className="vrow-v">{toMs(health?.generated_at) ? <>{fmtDateTime(health.generated_at)} <span className="muted">· {relativeTime(health.generated_at, nowMs)}</span></> : <span className="muted">not reported</span>}</div>
 
-        <div className="vrow-k">Next run</div>
-        <div className="vrow-v mono">{nextScheduledRunLabel()}</div>
-      </div>
+            <div className="vrow-k">Next run</div>
+            <div className="vrow-v mono">{nextScheduledRunLabel()}{overdue ? <span className="muted"> · overdue</span> : null}</div>
+          </div>
+        </>
+      )}
+
+      {showRows && !live && (
+        <div className="verdict-secondary">
+          <div className="vrow-k">Live data</div>
+          <div className="vrow-v"><span className="muted">none yet — the breakdown below is a representative example</span></div>
+          <div className="vrow-k">Next run</div>
+          <div className="vrow-v mono">{nextScheduledRunLabel()}</div>
+        </div>
       )}
     </div>
   );

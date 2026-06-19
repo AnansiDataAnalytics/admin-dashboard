@@ -17,7 +17,10 @@ function slug(s) {
 
 async function listRuns({ limit = 50 } = {}) {
   const c = await runsColl();
-  return c.find({}, { projection: { _id: 0 } })
+  // Only the WED data build belongs on the dashboard. Filter by workflow name so
+  // any non-WED runs already in the collection (e.g. CodeQL) stay hidden even
+  // before the ingest-side filter has pruned them.
+  return c.find({ name: config.wedWorkflow }, { projection: { _id: 0 } })
     .sort({ started_at: -1 })
     .limit(Math.min(Number(limit) || 50, 200))
     .toArray();

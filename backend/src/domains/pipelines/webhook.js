@@ -26,11 +26,21 @@ function verifySignature(rawBody, signature) {
 }
 
 async function handleEvent(eventType, payload) {
+  // Only the WED data build is the dashboard's concern. The repo also fires
+  // webhooks for CodeQL ("Code Quality") and other workflows; drop those at the
+  // door so they never enter pipeline_runs. workflow_run carries `name`;
+  // workflow_job carries `workflow_name`.
   if (eventType === 'workflow_run' && payload && payload.workflow_run) {
+    if (payload.workflow_run.name !== config.wedWorkflow) {
+      return { handled: 'ignored', reason: 'non-WED workflow', workflow: payload.workflow_run.name };
+    }
     const run_id = await runs.upsertWorkflowRun(payload.workflow_run);
     return { handled: 'workflow_run', run_id };
   }
   if (eventType === 'workflow_job' && payload && payload.workflow_job) {
+    if (payload.workflow_job.workflow_name !== config.wedWorkflow) {
+      return { handled: 'ignored', reason: 'non-WED workflow', workflow: payload.workflow_job.workflow_name };
+    }
     await runs.updateWorkflowJob(payload.workflow_job, payload.workflow_job.run_id);
     return { handled: 'workflow_job', run_id: String(payload.workflow_job.run_id) };
   }

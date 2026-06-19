@@ -58,7 +58,7 @@ function StageCounts({ sources, variables }) {
   );
 }
 
-function Matrix({ title, unit, stageKeys, rows, total, expectedNote }) {
+function Matrix({ title, unit, stageKeys, rows, total }) {
   const [open, setOpen] = useState(false);
   const flagged = rows.filter((r) => isAttention(r, stageKeys));
   const fallbackRows = rows.filter((r) => !isAttention(r, stageKeys) && isFallback(r, stageKeys));
@@ -96,7 +96,6 @@ function Matrix({ title, unit, stageKeys, rows, total, expectedNote }) {
       {rows.length === 0 ? (
         <div className="mx-empty">
           <Icon.alert size={14} /> No per-source results were posted for this run.
-          {expectedNote ? <span className="muted"> {expectedNote}</span> : null}
         </div>
       ) : (
         <>
@@ -130,15 +129,14 @@ function Matrix({ title, unit, stageKeys, rows, total, expectedNote }) {
   );
 }
 
-export default function SourceHealth({ health, err, progress }) {
+export default function SourceHealth({ health, err }) {
   if (err) return <div className="state-line err"><Icon.alert size={15} /> {err}</div>;
   if (!health) return <div className="state-line"><Icon.repeat size={15} /> Loading source health…</div>;
 
+  // An empty manifest is a legitimate outcome (e.g. a clean-only test run that
+  // skips DOWNLOAD/COMBINE emits no per-source rows), not necessarily a gap — so
+  // the empty state states the fact neutrally without implying a problem.
   const s = health.summary || {};
-  // Honest discrepancy hint: the box's heartbeat reported sources to download but
-  // the manifest carries no per-source rows (an upstream source-health gap).
-  const expected = progress?.download?.total;
-  const sourceNote = expected ? `(the box reported ${fmtNum(expected)} sources to download)` : null;
 
   return (
     <div>
@@ -154,8 +152,7 @@ export default function SourceHealth({ health, err, progress }) {
       <StageCounts sources={health.sources} variables={health.variables} />
 
       <Matrix title="Source processing" unit="sources" stageKeys={['download', 'clean']}
-              rows={health.sources || []} total={s.sources_total || (health.sources || []).length}
-              expectedNote={sourceNote} />
+              rows={health.sources || []} total={s.sources_total || (health.sources || []).length} />
 
       <Matrix title="Combine" unit="variables" stageKeys={['combine']}
               rows={health.variables || []} total={s.variables_total || (health.variables || []).length} />

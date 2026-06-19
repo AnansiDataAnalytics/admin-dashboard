@@ -196,7 +196,7 @@ export default function WedPage() {
 
       <Card icon="server" title="Source health"
             hint={runDetail && detailRun?.version && detailRun.version !== '—' ? detailRun.version : null}>
-        <SourceHealth health={cardHealth} err={healthErr} progress={runDetail?.progress} />
+        <SourceHealth health={cardHealth} err={healthErr} />
       </Card>
 
       <RunView run={detailRun} db={summary?.db} />

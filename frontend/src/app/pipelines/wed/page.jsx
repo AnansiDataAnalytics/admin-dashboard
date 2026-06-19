@@ -135,6 +135,14 @@ export default function WedPage() {
   const detailRun = selectedRunView || repRun;  // picker-controlled detail view
   const hasRuns = runs.length > 0;
 
+  // Source-health for the picker-selected run (per-run): each run doc carries its
+  // own source_health, so the picker drives this section too. Fall back to the
+  // global last-finished manifest when no run is selected (representative/no runs).
+  const cardHealth = useMemo(
+    () => (runDetail?.source_health ? { ...runDetail.source_health, representative: false } : health),
+    [runDetail, health],
+  );
+
   return (
     <div className="shell">
       <nav className="crumb">
@@ -167,16 +175,12 @@ export default function WedPage() {
       {activeRunView && <RunningHero run={activeRunView} />}
       {activeRunView && <PipelineProgress run={activeRunView} />}
 
-      <Card icon="server" title="Source health">
-        <SourceHealth health={health} err={healthErr} />
-      </Card>
-
-      {/* ── Workflow run detail — browse any run via the picker ── */}
+      {/* ── Run inspection zone — the picker drives the source-health + run views below ── */}
       {!hasRuns && (
         <div className="preview-banner">
           <span className="pb-ico"><Icon.bolt size={16} /></span>
           <div className="pb-text">
-            <b>Representative run.</b> No live run has reported yet — the timeline &amp; steps below show the shape of a weekly build. Release data &amp; change tracking further down is <b>live</b>.
+            <b>Representative run.</b> No live run has reported yet — the source health &amp; timeline below show the shape of a weekly build. Release data &amp; change tracking further down is <b>live</b>.
           </div>
         </div>
       )}
@@ -184,11 +188,16 @@ export default function WedPage() {
       {hasRuns && (
         <div className="topbar" style={{ marginBottom: 14 }}>
           <div className="brand-sub" style={{ fontSize: 13 }}>
-            Run detail{detailRun?.version && detailRun.version !== '—' ? <> · <span className="mono" style={{ color: 'var(--text)' }}>{detailRun.version}</span></> : null}
+            Inspecting run{detailRun?.version && detailRun.version !== '—' ? <> · <span className="mono" style={{ color: 'var(--text)' }}>{detailRun.version}</span></> : null}
           </div>
           <RunPicker runs={runs} value={selectedRunId} onChange={setSelectedRunId} activeId={activeRun?.run_id} />
         </div>
       )}
+
+      <Card icon="server" title="Source health"
+            hint={runDetail && detailRun?.version && detailRun.version !== '—' ? detailRun.version : null}>
+        <SourceHealth health={cardHealth} err={healthErr} progress={runDetail?.progress} />
+      </Card>
 
       <RunView run={detailRun} db={summary?.db} />
 

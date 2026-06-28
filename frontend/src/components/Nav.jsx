@@ -9,7 +9,7 @@ const LINKS = [
   { href: '/', label: 'Home', exact: true, ready: true },
   { href: '/pipelines', label: 'Pipelines', ready: true },
   { href: '/clients', label: 'Clients', ready: false },
-  { href: '/data-review', label: 'Data Review', ready: false },
+  { href: '/data-review', label: 'Data Review', ready: true },
   { href: '/analytics', label: 'Analytics', ready: false },
 ];
 

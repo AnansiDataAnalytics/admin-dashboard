@@ -35,7 +35,7 @@ export default function Home() {
         </div>
         <div className="ahero-clock">
           {now ? <>{fmtClock(now)}<br /></> : null}
-          <b>1</b> of 4 services live
+          <b>2</b> of 4 services live
         </div>
       </header>
 
@@ -97,7 +97,7 @@ export default function Home() {
           <span className="t-svc-ico"><Icon.inspect size={19} /></span>
           <h3>Data Review</h3>
           <p>Inspect, compare and sign off releases before they ship.</p>
-          <span className="t-svc-tag">Planned</span>
+          <span className="t-svc-tag">Live</span>
         </Link>
         <Link className="tile t-svc" href="/analytics">
           <span className="t-svc-ico"><Icon.chart size={19} /></span>
@@ -109,7 +109,7 @@ export default function Home() {
 
       <footer className="afoot">
         <span>Anansi Admin · internal use only</span>
-        <span className="mono">1 of 4 services live</span>
+        <span className="mono">2 of 4 services live</span>
       </footer>
     </main>
   );

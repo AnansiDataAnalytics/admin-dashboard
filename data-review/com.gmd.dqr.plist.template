@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.gmd.dqr</string>
+
+  <!-- install_macos.sh fills in __REPO__, __PORT__, __PYBIN__ and __PATH__ -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO__/audit_dashboard/autoserve.sh</string>
+    <string>__PORT__</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+
+  <!-- start at login and resurrect the supervisor if it ever exits -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- PATH is baked at install time from the python3 + git the user has,
+       so launchd finds the same tools the interactive shell does. DQR_PYTHON
+       pins the exact interpreter regardless of PATH ordering. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+    <key>DQR_PYTHON</key>
+    <string>__PYBIN__</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>__REPO__/audit_dashboard/autoserve.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO__/audit_dashboard/autoserve.log</string>
+</dict>
+</plist>

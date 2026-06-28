@@ -1,0 +1,3295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Data quality review</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<style>
+  :root {
+    --bg: #fdfdfd;
+    --fg: #222;
+    --muted: #6a6a6a;
+    --border: #ddd;
+    --accent: #2563eb;
+    --good: #16a34a;
+    --warn: #d97706;
+    --row-current: #e0f2fe;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--fg);
+               font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  #app { display: grid; grid-template-columns: 300px 1fr; height: 100%; }
+  /* sidebar */
+  aside { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  aside header { padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+  aside header h1 { margin: 0; font-size: 14px; font-weight: 600; }
+  aside header .counts { font-size: 11px; color: var(--muted); }
+  aside header input, aside header select {
+    width: 100%; padding: 6px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;
+    background: white; color: var(--fg);
+  }
+  .flag-chips { display: flex; gap: 4px; }
+  .flag-chip {
+    flex: 1; padding: 3px 6px; font-size: 11px; border: 1px solid var(--border);
+    background: white; cursor: pointer; border-radius: 4px; font-family: ui-monospace, monospace;
+  }
+  .flag-chip:hover { background: #f3f4f6; }
+  .flag-chip.on { background: var(--warn); color: white; border-color: var(--warn); }
+  .sort-btn {
+    background: var(--bg); color: var(--fg); border: 1px solid var(--bd);
+    padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;
+  }
+  .sort-btn:hover { background: #f3f4f6; }
+  .sort-btn.on { background: var(--accent); color: white; border-color: var(--accent); }
+  /* Reason-filter dropdown */
+  .reason-filter { position: relative; }
+  #reason-filter-btn {
+    background: var(--bg); color: var(--fg); border: 1px solid var(--bd);
+    padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;
+    width: 100%; text-align: left;
+  }
+  #reason-filter-btn:hover { background: #f3f4f6; }
+  .reason-filter-menu {
+    position: absolute; left: 0; right: 0; top: 100%; z-index: 50;
+    background: white; border: 1px solid var(--bd); border-radius: 3px;
+    margin-top: 2px; box-shadow: 0 4px 12px rgba(0,0,0,.08);
+    max-height: 380px; overflow-y: auto; font-size: 11px;
+  }
+  .reason-filter-menu[hidden] { display: none; }
+  .reason-filter-meta {
+    background: var(--bg); color: var(--fg); border: 1px solid var(--bd);
+    padding: 1px 6px; border-radius: 3px; cursor: pointer; font-size: 11px;
+  }
+  .reason-filter-meta:hover { background: #f3f4f6; }
+  .reason-filter-menu .group-label {
+    padding: 4px 8px 2px; font-size: 9px; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted);
+  }
+  .reason-filter-menu label {
+    display: flex; align-items: center; gap: 6px; padding: 3px 8px;
+    cursor: pointer; user-select: none;
+  }
+  .reason-filter-menu label:hover { background: #f3f4f6; }
+  /* Reset the aside-header input rule (width:100%, padding) that would
+     otherwise stretch these checkboxes across the row. */
+  .reason-filter-menu input[type=checkbox] {
+    width: auto; padding: 0; margin: 0; flex: 0 0 auto;
+  }
+  /* View-mode toggle buttons share the same style as sort buttons. */
+  .view-btn {
+    background: var(--bg); color: var(--fg); border: 1px solid var(--bd);
+    padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;
+  }
+  .view-btn:hover { background: #f3f4f6; }
+  .view-btn.on { background: var(--accent); color: white; border-color: var(--accent); }
+  /* Error button (left arrow / left-pile). */
+  button.bad { background: #fee2e2; color: #991b1b; border-color: #f87171; }
+  button.bad:hover { background: #fecaca; }
+  /* Shortcuts overlay (toggled by ↑/↓ keys or the Shortcuts button). */
+  .shortcuts-overlay {
+    position: fixed; z-index: 300; right: 24px; bottom: 24px;
+    background: white; border: 1px solid #999; border-radius: 4px;
+    padding: 10px 14px; font-size: 12px; line-height: 1.7;
+    box-shadow: 0 6px 20px rgba(0,0,0,.18);
+    display: none;
+  }
+  .shortcuts-overlay h4 { margin: 0 0 4px; font-size: 12px; }
+  .shortcuts-overlay kbd {
+    font-family: ui-monospace, monospace; background: #f3f4f6;
+    border: 1px solid #ddd; border-radius: 3px; padding: 0 4px;
+    font-size: 11px;
+  }
+  .sidebar-label {
+    font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em;
+    margin: 8px 0 2px;
+  }
+  aside .pairs { flex: 1; overflow-y: auto; }
+  .pair {
+    padding: 3px 10px; cursor: pointer; user-select: none;
+    border-left: 3px solid transparent; font-variant-numeric: tabular-nums;
+    /* fixed-width "table" columns: dot | ISO3 | variable | issue-count */
+    display: grid;
+    grid-template-columns: 10px 40px 1fr auto;
+    gap: 8px; align-items: center;
+    font-size: 12px;
+  }
+  .pair:hover { background: #f3f4f6; }
+  .pair.current { background: var(--row-current); border-left-color: var(--accent); font-weight: 600; }
+  .pair .iso { color: var(--fg); font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 600; }
+  .pair .var { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pair .issues {
+    font-size: 10px; color: #991b1b; background: #fee2e2;
+    padding: 1px 5px; border-radius: 3px; white-space: nowrap;
+  }
+  .pair .issues.none { color: #9ca3af; background: transparent; }
+  .pair .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.none { background: #d1d5db; }
+  .dot.commented { background: var(--warn); }
+  .dot.approved { background: var(--good); }
+  .dot.limitation { background: #6366f1; }   /* known-limitation: imperfect-but-accepted */
+  .dot.both { background: linear-gradient(90deg, var(--good) 50%, var(--warn) 50%); }
+  /* main */
+  main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  main header { padding: 10px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  main header h2 { margin: 0; font-size: 16px; }
+  main header .controls { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+  main header label { font-size: 12px; color: var(--muted); display: inline-flex; gap: 4px; align-items: center; }
+  main .body { flex: 1; overflow-y: auto; padding: 10px 18px 18px; }
+  #chart { width: 100%; height: 380px; }
+  .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  /* table */
+  .tbl-wrap { margin-top: 14px; max-height: 280px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 3px 8px; border-bottom: 1px solid #f0f0f0; text-align: right; white-space: nowrap; }
+  th { background: #fafafa; position: sticky; top: 0; font-weight: 600; }
+  th:first-child, td:first-child { text-align: left; }
+  /* Mitchell column highlighting removed -- no source is privileged. */
+  td.yoy-up { background: #fee2e2; color: #b91c1c; }
+  td.yoy-dn { background: #fee2e2; color: #b91c1c; }
+  /* Per-source flag highlighting:
+     th.src-flagged  -- any source with ≥1 detected issue (hover for list)
+     td.flag-cell    -- a (year, source) cell with a year-specific flag */
+  th.src-flagged { background: #fecaca; color: #991b1b; cursor: pointer; }
+  th.src-flagged.open { background: #f87171; color: white; }
+  td.flag-cell   { background: #fecaca; color: #991b1b; font-weight: 500; cursor: pointer; }
+  /* Click-popover used by flagged headers and flagged cells. Closes on
+     outside-click or by clicking the same trigger again. */
+  .flag-popover {
+    position: fixed; z-index: 200; max-width: 360px;
+    background: white; border: 1px solid #f87171; border-radius: 4px;
+    padding: 8px 10px; font-size: 12px; line-height: 1.45;
+    box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    display: none;
+  }
+  .flag-popover h4 { margin: 0 0 4px; font-size: 12px; color: #991b1b; }
+  .flag-popover ul { margin: 0; padding-left: 18px; }
+  .flag-popover li { color: #444; }
+  /* peer-vs-Mitchell same-year level comparison.  Light pastels so the
+     value text stays legible. Tighter bounds = greener, looser = orange,
+     out of range = red. YoY anomalies (yoy-up/dn) take visual priority. */
+  td.vs-mit-green  { background: #dcfce7; }
+  td.vs-mit-orange { background: #ffedd5; }
+  td.vs-mit-red    { background: #fee2e2; }
+  /* Custom hover popup — replaces Plotly's unified-hover box so we can
+     sort rows by value descending. Plotly's own label is hidden by the
+     .hoverlayer > .legend selector below; the spike line is left intact. */
+  .custom-hover {
+    position: fixed; pointer-events: none; z-index: 1000;
+    background: rgba(255,255,255,0.98);
+    border: 1px solid #d4d4d4; border-radius: 4px;
+    padding: 6px 9px;
+    font: 11px ui-monospace, monospace;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+    display: none; max-width: 360px;
+  }
+  .custom-hover .year { font-weight: 600; margin-bottom: 3px; padding-bottom: 3px; border-bottom: 1px solid #eee; }
+  .custom-hover .row  { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
+  .custom-hover .swatch { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .custom-hover .src  { color: #444; }
+  .custom-hover .val  { margin-left: auto; padding-left: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .custom-hover .src.mit { color: #b91c1c; font-weight: 600; }
+  /* Hide Plotly's native unified-hover label (but keep spike lines). */
+  /* Normal cursor over the chart -- Plotly's drag layer otherwise sets
+     the cursor to crosshair / east-west resize / etc. depending on which
+     interaction is "primed". Force the plain pointer everywhere except
+     the clickable x-axis tick labels (handled separately below). */
+  #chart .draglayer * { cursor: default !important; }
+  /* X-axis tick labels become clickable filters: "start the chart and
+     table from this year". The pointer cursor + a tiny color shift on
+     hover make the affordance obvious. */
+  #chart .xtick > text { cursor: pointer; }
+  #chart .xtick > text:hover { fill: var(--accent) !important; }
+  /* Tooltip shown next to the hovered x-tick. */
+  .xtick-tip {
+    position: fixed; z-index: 220;
+    background: #1f2937; color: white; padding: 3px 8px;
+    border-radius: 3px; font-size: 11px; pointer-events: none;
+    display: none; white-space: nowrap;
+  }
+  /* Hide BOTH:
+     1. Plotly's unified-hover legend label (.hoverlayer > .legend) --
+        applies when hovermode is "x unified".
+     2. The per-trace yellow tooltips (.hoverlayer .hovertext) -- applies
+        when hovermode is "x" or "closest". The plotly_hover EVENT still
+        fires either way, so our custom #custom-hover popup keeps working.
+     The spike crosshair line is untouched. */
+  #chart .hoverlayer > .legend { display: none !important; }
+  #chart .hoverlayer .hovertext { display: none !important; }
+  /* Make the box-zoom selection band clearly visible regardless of the
+     computed plot-background contrast. */
+  #chart .zoomlayer .zoombox { fill: rgba(100,116,139,0.14) !important; stroke: none !important; }
+  #chart .zoomlayer .zoombox-corners { stroke: #94a3b8 !important; fill: #94a3b8 !important; }
+  /* cross-source ratio panel */
+  .ratio-panel { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; font-size: 11px; }
+  .ratio-panel .pill {
+    padding: 3px 8px; border-radius: 12px; background: #f3f4f6; color: #374151;
+    border: 1px solid #e5e7eb; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .ratio-panel .pill input[type=checkbox] {
+    margin: 0; cursor: pointer; accent-color: currentColor;
+  }
+  .ratio-panel .pill.off {
+    opacity: 0.45; text-decoration: line-through;
+  }
+  .ratio-panel .pill.warn { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+  .ratio-panel .pill.bad  { background: #fecaca; border-color: #f87171; color: #991b1b; font-weight: 600; }
+  /* source-issue buttons + flag badge */
+  .tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; align-items: center; }
+  .tag-row .label { font-size: 11px; color: var(--muted); margin-right: 4px; }
+  .src-btn {
+    padding: 3px 10px; font-size: 11px; border: 1px solid var(--border); border-radius: 999px;
+    background: white; cursor: pointer; font-family: ui-monospace, monospace;
+    white-space: nowrap; user-select: none;
+  }
+  .src-btn:hover { background: #f3f4f6; }
+  .src-btn.on {
+    background: #dc2626; color: white; border-color: #dc2626;
+    box-shadow: 0 0 0 1px #fecaca;
+  }
+  .src-btn.on:hover { background: #b91c1c; }
+  /* Brief pulse to show which source button was just hit by Cmd+] / Cmd+[ */
+  .src-btn.kbfocus {
+    animation: kbpulse 0.6s ease-out;
+    outline: 2px solid #2563eb;
+    outline-offset: 1px;
+  }
+  @keyframes kbpulse {
+    0%   { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.6); }
+    100% { box-shadow: 0 0 0 12px rgba(37, 99, 235, 0); }
+  }
+  .pair .sev {
+    margin-left: auto; font-size: 10px; color: #92400e;
+    background: #fef3c7; border-radius: 3px; padding: 0 4px; font-variant-numeric: tabular-nums;
+  }
+  .pair .sev.hot { background: #fecaca; color: #991b1b; font-weight: 600; }
+  /* Compact list of reason short-names next to each sidebar pair entry.
+     Helps the reviewer see *why* the pair is in the filtered list without
+     opening the chart panel. */
+  .pair .kinds {
+    font-size: 9px; color: #92400e; margin-left: 6px;
+    font-family: ui-monospace, SFMono-Regular, monospace; opacity: 0.8;
+  }
+  .flags-line {
+    margin-top: 4px; font-size: 11px; color: var(--warn);
+    padding: 4px 8px; background: #fffbeb; border-left: 3px solid #f59e0b; border-radius: 2px;
+  }
+  .flags-line .flag { margin-right: 8px; }
+  /* comment + footer */
+  .comment-block { margin-top: 14px; }
+  .comment-block label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+  textarea#comment {
+    width: 100%; min-height: 80px; padding: 8px; font: inherit;
+    border: 1px solid var(--border); border-radius: 4px; resize: vertical;
+  }
+  /* "you've been here before" reminder: prior approval/comment, surfaced
+     above the textarea when you revisit a pair so you don't have to
+     re-read the table to recall your past judgment. */
+  .prev-comment {
+    margin: 6px 0; padding: 6px 10px;
+    background: #f0fdf4; border-left: 3px solid var(--good);
+    font-size: 11px; color: #166534; border-radius: 2px;
+  }
+  .prev-comment.no-approve { background: #fffbeb; border-left-color: var(--warn); color: #92400e; }
+  .prev-comment .ts { color: var(--muted); font-size: 10px; margin-left: 6px; }
+  .prev-comment .text { display: block; margin-top: 3px; white-space: pre-wrap; }
+  /* History inline panel (full save log for the current pair) */
+  .history-toggle {
+    background: none; border: none; color: var(--accent);
+    cursor: pointer; padding: 0; font-size: 11px; text-decoration: underline;
+  }
+  .history-panel {
+    margin: 6px 0; padding: 6px 10px;
+    background: #f9fafb; border: 1px solid var(--border); border-radius: 4px;
+    font-size: 11px;
+  }
+  .history-entry {
+    padding: 4px 0; border-bottom: 1px dashed #e5e7eb;
+    display: grid; grid-template-columns: auto auto 1fr auto; gap: 8px; align-items: start;
+  }
+  .history-entry:last-child { border-bottom: none; }
+  .history-entry .ts { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .history-entry .ap { font-weight: 600; }
+  .history-entry .ap.yes { color: var(--good); }
+  .history-entry .ap.no { color: var(--muted); }
+  .history-entry .body {
+    white-space: pre-wrap; word-break: break-word; font-family: inherit;
+  }
+  .history-entry button {
+    padding: 2px 8px; font-size: 10px; cursor: pointer;
+    border: 1px solid var(--border); background: white; border-radius: 3px;
+  }
+  .history-entry button:hover { background: var(--accent); color: white; border-color: var(--accent); }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  button {
+    padding: 6px 14px; font: inherit; border: 1px solid var(--border); border-radius: 4px;
+    background: white; cursor: pointer;
+  }
+  button:hover { background: #f3f4f6; }
+  button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  button.primary:hover { background: #1d4ed8; }
+  button.good { background: var(--good); color: white; border-color: var(--good); }
+  button.good:hover { background: #15803d; }
+  /* "Regenerate flags": amber when flags.parquet is out of date vs its inputs. */
+  #regen-btn.stale { background: #fef3c7; color: #92400e; border-color: var(--warn); }
+  #regen-btn.stale:hover { background: #fde68a; }
+  #regen-btn:disabled { opacity: .6; cursor: default; }
+  .save-status { font-size: 11px; color: var(--muted); }
+  .save-status.ok { color: var(--good); }
+  .save-status.err { color: #dc2626; font-weight: 600; }
+  .shortcuts { font-size: 11px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+  .shortcuts .sc-group { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .shortcuts .sc-group b { font-weight: 600; color: var(--fg); margin-right: 4px; }
+  kbd {
+    background: #f3f4f6; border: 1px solid var(--border); border-bottom-width: 2px;
+    border-radius: 3px; padding: 1px 5px; font-family: ui-monospace, monospace; font-size: 10px;
+  }
+  /* ---- top-level tab strip (Review | Findings) ---- */
+  #view-tabs { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--border); background: #fafafa; }
+  .main-tab { font-size: 12px; padding: 6px 14px; border: 1px solid var(--border); border-bottom: none;
+    border-radius: 6px 6px 0 0; background: #eef0f3; color: var(--muted); cursor: pointer; }
+  .main-tab:hover { background: #e5e7eb; }
+  .main-tab.on { background: white; color: var(--fg); font-weight: 600; position: relative; top: 1px; }
+  .tab-count { display: inline-block; min-width: 16px; text-align: center; background: #ef4444; color: white;
+    border-radius: 9px; padding: 0 5px; font-size: 10px; font-weight: 600; margin-left: 4px; }
+  /* The two views are mutually exclusive: in review mode the findings view
+     is hidden; in findings mode the review chrome (sidebar, header, body)
+     collapses and the findings view takes the full width. */
+  #findings-view { display: none; padding: 16px 22px; overflow: auto; height: 100%; box-sizing: border-box; }
+  /* Sidebar is hidden in findings mode; collapse the grid to a single column
+     so main (and the findings view) spans the full width instead of being
+     trapped in the 300px sidebar track. */
+  #app.findings-mode { grid-template-columns: 1fr; }
+  #app.findings-mode > aside,
+  #app.findings-mode main > header,
+  #app.findings-mode main > .body { display: none !important; }
+  #app.findings-mode #findings-view { display: block; }
+  #findings-view h3 { margin: 18px 0 6px; font-size: 13px; }
+  #findings-view h3 .label-note { font-weight: 400; color: var(--muted); font-size: 11px; }
+  .findings-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .findings-bar input[type=search] { flex: 1; min-width: 220px; padding: 4px 8px; font: inherit; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 5px; }
+  .findings-bar select, .findings-bar button { font-size: 11px; padding: 3px 8px; }
+  .findings-bar .grow { flex: 1; }
+  .findings-bar #findings-summary { font-size: 11px; color: var(--muted); }
+  .findings-bar #findings-refresh { font-size: 11px; margin-left: 6px; }
+  .find-bucket { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0 16px; overflow: hidden; }
+  .find-bucket-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: #f3f4f6; border-bottom: 1px solid var(--border); font-size: 12px; cursor: pointer; user-select: none; }
+  .find-bucket-head:hover { background: #eceef1; }
+  .find-bucket-head .chev { color: var(--muted); width: 10px; }
+  .find-bucket-head .src { font-weight: 600; }
+  .find-bucket-head .grow { flex: 1; }
+  .find-card.is-last { background: #fffbeb; border-left: 3px solid var(--accent); }
+  .find-card.is-last:hover { background: #fef9e7; }
+  .find-card { display: flex; align-items: flex-start; gap: 12px; padding: 9px 12px; border-top: 1px solid #f0f0f0; font-size: 12px; cursor: pointer; }
+  .find-card:first-child { border-top: none; }
+  .find-card:hover { background: #f8fafc; }
+  .find-card:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .find-card .fc-main { flex: 1; min-width: 0; }
+  .find-card .fc-pair { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .find-card:hover .fc-pair { text-decoration: underline; }
+  .find-card .fc-meta { color: var(--muted); font-size: 11px; margin: 1px 0 3px; }
+  .find-card .fc-comment { white-space: pre-wrap; word-break: break-word; }
+  .find-card .fc-solution { margin-top: 5px; padding: 5px 8px; background: #eef2ff; border-left: 3px solid #6366f1; border-radius: 2px; font-size: 11px; color: #3730a3; }
+  .find-card .fc-solution.pending { background: #f8fafc; border-left-color: var(--border); color: var(--muted); font-style: italic; }
+  .find-card .fc-soln-h { display: block; font-weight: 600; margin-bottom: 2px; }
+  .find-card .fc-cause { margin-top: 3px; color: #4b5563; font-weight: 400; }
+  .find-card .fc-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; align-items: stretch; }
+  .find-card .fc-actions button { white-space: nowrap; font-size: 11px; padding: 3px 8px; }
+  .find-badge { display: inline-block; background: #fef3c7; border: 1px solid #fcd34d; color: #92400e;
+    border-radius: 3px; padding: 0 5px; font-size: 10px; margin-right: 3px; }
+  #findings-empty { color: var(--muted); padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <header>
+      <h1>Data quality review</h1>
+      <div class="reviewer-line" id="reviewer-line" style="font-size:11px;color:var(--muted);margin-bottom:2px">
+        <span id="reviewer-name">…</span>
+        <span id="reviewer-week"></span>
+        <button id="reviewer-edit" type="button" style="font-size:10px;padding:0 4px;margin-left:4px">change</button>
+      </div>
+      <div class="counts" id="counts">Loading…</div>
+      <input id="search" type="search" placeholder="Filter ISO3 or var (press /)…" autocomplete="off" />
+      <select id="filter">
+        <option value="all">Show all</option>
+        <option value="unreviewed">Only unreviewed</option>
+        <option value="commented">Only commented</option>
+        <option value="approved">Only approved</option>
+        <option value="limitation">Only known-limitations</option>
+        <option value="reviewed">Only reviewed (any disposition)</option>
+        <option value="flagged">Only flagged (any type)</option>
+        <option value="new">Only new (first flagged recently)</option>
+      </select>
+      <div id="new-weeks-row" style="display:none;font-size:11px;color:var(--muted);margin-top:2px">
+        first flagged within the last
+        <input id="new-weeks" type="number" min="1" max="104" value="1"
+               style="width:48px;padding:1px 4px;font:inherit" /> week(s)
+      </div>
+      <div class="sidebar-label">Filter by reason</div>
+      <div class="reason-filter" id="reason-filter">
+        <button id="reason-filter-btn" type="button" title="Click to select which algorithmic checks the sidebar should consider when filtering pairs">Error types: All ▾</button>
+        <div id="reason-filter-menu" class="reason-filter-menu" hidden>
+          <div style="display:flex;gap:8px;padding:4px 8px 6px;border-bottom:1px solid #eee;font-size:11px">
+            <button type="button" id="reason-filter-all"  class="reason-filter-meta">All</button>
+            <button type="button" id="reason-filter-none" class="reason-filter-meta">None</button>
+            <span style="flex:1"></span>
+            <button type="button" id="reason-filter-close" class="reason-filter-meta">Done</button>
+          </div>
+          <!-- populated dynamically by renderReasonFilter() -->
+          <div id="reason-filter-list"></div>
+        </div>
+      </div>
+      <div class="sidebar-label">Sort by</div>
+      <div id="sort" data-value="default" style="display:flex;gap:4px;font-size:11px">
+        <button class="sort-btn on" data-sort="default" type="button" title="Sort pairs alphabetically by ISO3, then variable name">ISO → var</button>
+        <button class="sort-btn"    data-sort="suspicion" type="button" title="Sort pairs by issue count, most suspicious first">Most suspicious</button>
+      </div>
+    </header>
+    <div class="pairs" id="pairs"></div>
+  </aside>
+  <main>
+    <div id="view-tabs">
+      <button class="main-tab on" data-tab="review" type="button" title="Review flagged country-variable pairs one at a time">Review</button>
+      <button class="main-tab" data-tab="findings" type="button" title="Errors you confirmed, grouped by likely source, ready to file as GitHub issues">⚑ Findings <span id="findings-count" class="tab-count" style="display:none"></span></button>
+    </div>
+    <header>
+      <h2 id="title">…</h2>
+      <div class="controls">
+        <span style="font-size:11px;color:var(--muted)">view:</span>
+        <div id="viewmode" data-value="levels" style="display:inline-flex;gap:4px">
+          <button class="view-btn on" data-view="levels"  type="button" title="Raw level values">Levels</button>
+          <button class="view-btn"    data-view="yoy"     type="button" title="Year-on-year % change">YoY %</button>
+          <button class="view-btn"    data-view="rebased" type="button" title="Rebased to an anchor year = 100">Rebased</button>
+        </div>
+        <span id="anchor-controls" style="display:none">
+          <label style="font-size:11px;color:var(--muted)">anchor year:
+            <input id="anchor-year" type="number" step="1" style="width:64px;padding:2px 4px;font:inherit" />
+          </label>
+          <span style="font-size:11px;color:var(--muted)">— or click any point on the chart</span>
+        </span>
+        <label><input type="checkbox" id="logscale" checked /> log scale (y)</label>
+        <button id="sync-btn" title="commit + push docs/GMD_AUDIT_LOG.md and SOURCE_ISSUES.md to origin (Cmd/Ctrl+S)">📤 sync</button>
+        <button id="regen-btn" title="Recompute the flag engine (flags.py) over the latest pipeline outputs, then refresh the dashboard">⟳ regenerate flags</button>
+        <button id="apply-btn" title="Fast: re-apply your approvals to the cached flags and refresh the list (no full recompute)">apply approvals</button>
+        <span class="save-status" id="save-status"></span>
+      </div>
+    </header>
+    <div class="body">
+      <div id="chart"></div>
+      <div id="custom-hover" class="custom-hover"></div>
+      <div class="meta" id="meta"></div>
+      <div class="ratio-panel" id="ratio-panel"></div>
+      <!-- the messy "flags-line" banner was replaced by per-column header
+           coloring + per-cell coloring inside the data table below. -->
+      <div class="tbl-wrap" id="tbl-wrap"></div>
+      <div class="flag-popover" id="flag-popover"></div>
+      <div class="xtick-tip" id="xtick-tip"></div>
+      <div class="shortcuts-overlay" id="shortcuts-overlay">
+        <h4>keyboard shortcuts</h4>
+        <kbd>→</kbd> approve · <kbd>←</kbd> error · <kbd>k</kbd> known-limitation<br>
+        <kbd>↑</kbd>/<kbd>↓</kbd> show this panel<br>
+        <kbd>⌘Z</kbd> / <kbd>⌃Z</kbd> undo last decision<br>
+        <kbd>c</kbd> focus comment · <kbd>u</kbd> next unreviewed · <kbd>/</kbd> search<br>
+        <kbd>i</kbd> cycle through "Issue is in" sources<br>
+        <kbd>v</kbd> cycle view (levels/YoY/rebased)<br>
+        <kbd>s</kbd> sync to origin<br>
+        <kbd>Esc</kbd> unfocus (re-enable shortcuts) + dismiss overlays
+      </div>
+      <div class="comment-block">
+        <label for="comment">comment <span style="color:var(--muted)">(only saves when non-empty or you hit Approve)</span>
+          <button class="history-toggle" id="history-toggle" type="button" style="margin-left:6px">🕐 history</button>
+        </label>
+        <div class="prev-comment" id="prev-comment" style="display:none"></div>
+        <div class="prior-vetting" id="prior-vetting" style="display:none;font-size:11px;background:#eff6ff;border-left:3px solid #1d4ed8;border-radius:2px;padding:5px 8px;margin-bottom:6px"></div>
+        <div class="history-panel" id="history-panel" style="display:none"></div>
+        <div class="tag-row" id="tag-row">
+          <span class="label">issue is in:</span>
+          <!-- buttons populated dynamically per pair -->
+        </div>
+        <textarea id="comment" placeholder="leave a comment if there's an issue; otherwise approve and move on…"></textarea>
+        <div class="vetting-status-row" style="margin:6px 0;font-size:12px;color:var(--muted)">
+          <span id="vetting-status" style="opacity:.75"></span>
+        </div>
+        <div class="toolbar">
+          <button id="error-btn" class="bad" title="Mark this country-variable as having an error (left arrow). Stays in the 'fix' pile until the engine no longer flags it.">← Error</button>
+          <button id="limitation-btn" title="Known limitation (k): the data is imperfect but accepted as-is (e.g. a price-only index where we'd prefer total-return). Suppresses the flag but records WHY it's tolerated.">~ Limitation</button>
+          <button id="approve-btn" class="good" title="Approve this country-variable (right arrow). It won't reappear unless a source value changes and a new flag fires.">Approve →</button>
+          <button id="legend-btn" type="button" title="Show keyboard shortcuts (or hold ↑/↓)">⇅ Shortcuts</button>
+          <button id="undo-btn" title="Undo the most recent Approve/Error decision (Cmd/Ctrl+Z)">↶ Undo</button>
+          <button id="draft-issue-btn" type="button" title="Open a pre-filled GitHub issue for this country-variable (uses your comment + flagged sources)">📋 Draft issue</button>
+          <span style="flex:1"></span>
+          <span class="save-status" id="save-status-inline" style="font-size:11px;color:var(--muted)"></span>
+        </div>
+      </div>
+    </div>
+    <div id="findings-view"></div>
+  </main>
+</div>
+
+<script>
+"use strict";
+
+const STATE = {
+  data: null,             // {pairs:[...], data:{key:{src:[[y,v],...]}}}
+  comments: {},           // {key:{comment, approved, ts}}
+  filteredIdx: [],        // indices into data.pairs after filter+search
+  currentIdx: 0,          // index into data.pairs (NOT filteredIdx)
+  saveTimer: null,
+  unsavedDirty: false,
+  // Sources the user has hidden, scoped per (country, variable) pair so each
+  // view has its own visibility state. Stored as Map<pairKey, Set<src>>;
+  // mirrored to localStorage on every change.
+  hiddenSources: new Map(),
+  // X-range filter applied to the data table only (driven by box-zoom
+  // on the chart). Cleared by double-click on either the chart or table.
+  tableXRange: null,
+  // Undo stack: indices of pairs the user just decided on.
+  undoStack: [],
+  activeTab: "review",    // "review" | "findings"
+  findings: null,         // {generated, n, findings:[...]} cached from /findings
+  findingsFilter: { q: "", flag: "" },  // Findings tab filter bar state
+  findingsCollapsed: {},  // bucketKey -> true when that source group is collapsed
+  lastFindingKey: null,   // last finding opened from the tab (for return-to-place)
+  findingsReturnScroll: false,  // scroll last finding into view on next list render
+};
+
+const $ = (id) => document.getElementById(id);
+
+// --- Chart styling (Tufte: muted ink, minimal grid, clean type) ------------
+// A calm categorical palette (Tableau-10 muted) so 11 peer series stay
+// distinguishable without shouting. GMD draws on top in black, so it's
+// excluded here.
+const MUTED_COLORWAY = [
+  "#4e79a7", "#59a14f", "#e15759", "#b07aa1", "#76b7b2", "#edc948",
+  "#ff9da7", "#9c755f", "#f28e2b", "#86bcb6", "#d37295",
+];
+const INK = "#4a5568";        // axis text / titles
+const INK_FAINT = "#cbd5e0";  // axis lines / ticks
+const GRID_FAINT = "#eef1f4"; // gridlines — just enough to read values off
+const ZERO_LINE = "#94a3b8";  // the one reference line that earns its ink
+const CHART_FONT = { family: "system-ui, -apple-system, Segoe UI, sans-serif",
+                     size: 12, color: INK };
+
+function pairKey(p) { return p.iso3 + "_" + p.var; }
+
+// Compute a snug Y range that contains every visible point whose X falls in
+// [x0,x1]. Used by both the relayout handler (user box-zoom on X) and the
+// re-render path (when a render preserves the prior X window but the data
+// inside it has changed — e.g. new rebase anchor, source toggled). Returns
+// null when no visible points fall inside the window.
+function computeYRangeForXWindow(traces, x0, x1, yIsLog) {
+  let ymin = Infinity, ymax = -Infinity;
+  for (const trace of traces || []) {
+    if (trace.visible === "legendonly" || trace.visible === false) continue;
+    const xs = trace.x, ys = trace.y;
+    if (!xs || !ys) continue;
+    for (let i = 0; i < xs.length; i++) {
+      const x = xs[i], y = ys[i];
+      if (x == null || y == null) continue;
+      if (x < x0 || x > x1) continue;
+      if (yIsLog && y <= 0) continue;
+      if (y < ymin) ymin = y;
+      if (y > ymax) ymax = y;
+    }
+  }
+  if (!Number.isFinite(ymin) || !Number.isFinite(ymax)) return null;
+  if (yIsLog) {
+    const lo = Math.log10(ymin), hi = Math.log10(ymax);
+    const pad = (hi - lo) * 0.05 || 0.1;
+    return [lo - pad, hi + pad];
+  }
+  if (ymin === ymax) {
+    const pad = Math.abs(ymin) * 0.05 || 1;
+    return [ymin - pad, ymax + pad];
+  }
+  const pad = (ymax - ymin) * 0.05;
+  return [ymin - pad, ymax + pad];
+}
+
+function currentPairKey() {
+  const p = STATE.data?.pairs?.[STATE.currentIdx];
+  return p ? pairKey(p) : null;
+}
+function hiddenSetFor(key) {
+  if (!key) return new Set();
+  let s = STATE.hiddenSources.get(key);
+  if (!s) { s = new Set(); STATE.hiddenSources.set(key, s); }
+  return s;
+}
+function currentHiddenSet() { return hiddenSetFor(currentPairKey()); }
+
+function loadHiddenSources() {
+  STATE.hiddenSources = new Map();
+  try {
+    const raw = localStorage.getItem("dqr_hidden_sources_by_pair") || "{}";
+    const obj = JSON.parse(raw);
+    for (const [k, arr] of Object.entries(obj)) {
+      STATE.hiddenSources.set(k, new Set(arr));
+    }
+  } catch (_) { STATE.hiddenSources = new Map(); }
+}
+function persistHiddenSources() {
+  try {
+    const obj = {};
+    for (const [k, s] of STATE.hiddenSources) {
+      if (s.size) obj[k] = [...s];
+    }
+    localStorage.setItem(
+      "dqr_hidden_sources_by_pair",
+      JSON.stringify(obj)
+    );
+  } catch (_) {}
+}
+function toggleSourceVisibility(src) {
+  const s = currentHiddenSet();
+  if (s.has(src)) s.delete(src);
+  else s.add(src);
+  persistHiddenSources();
+  renderChartAndTable();
+}
+function statusOf(key) {
+  const c = STATE.comments[key];
+  if (!c) return "none";
+  const has = c.comment && c.comment.trim().length > 0;
+  if (c.status === "known-limitation") return "limitation";
+  if (c.approved && has) return "both";
+  if (c.approved) return "approved";
+  if (has) return "commented";
+  return "none";
+}
+
+async function loadData() {
+  const r = await fetch("data.json");
+  if (!r.ok) throw new Error("data.json fetch failed: " + r.status);
+  STATE.data = await r.json();
+}
+async function loadComments() {
+  try {
+    const r = await fetch("comments.json", { cache: "no-store" });
+    if (r.ok) STATE.comments = await r.json();
+  } catch (e) { console.warn("comments load failed", e); }
+}
+
+function applyFilter() {
+  const search = $("search").value.trim().toLowerCase();
+  const mode = $("filter").value;
+  const sortMode = $("sort").dataset.value;
+  // "new" mode: cutoff date = today - N weeks. A pair qualifies if its
+  // first_seen (earliest weekly snapshot it was flagged in) is on/after
+  // the cutoff -- i.e. it started being flagged recently.
+  let newCutoff = null;
+  if (mode === "new") {
+    const weeks = Math.max(1, parseInt($("new-weeks").value, 10) || 1);
+    const d = new Date();
+    d.setDate(d.getDate() - weeks * 7);
+    newCutoff = d.toISOString().slice(0, 10);  // YYYY-MM-DD
+  }
+  // Reason-filter dropdown handles its own active-set; chips are gone.
+  // Compute the active-reason set ONCE (it scans all pairs); calling it
+  // per-pair made applyFilter O(N²) and hung the render on 6,400 pairs.
+  const activeReasons = activeReasonSet();
+  const out = [];
+  for (let i = 0; i < STATE.data.pairs.length; i++) {
+    const p = STATE.data.pairs[i];
+    if (search && !((p.iso3 + " " + p.var).toLowerCase().includes(search))) continue;
+    const st = statusOf(pairKey(p));
+    if (mode === "unreviewed" && st !== "none") continue;
+    if (mode === "commented" && !(st === "commented" || st === "both")) continue;
+    if (mode === "approved" && !(st === "approved" || st === "both")) continue;
+    if (mode === "limitation" && st !== "limitation") continue;
+    if (mode === "reviewed" && st === "none") continue;
+    const allFlags = pairAllFlags(p);
+    if (mode === "flagged" && allFlags.length === 0) continue;
+    if (mode === "new") {
+      if (allFlags.length === 0) continue;            // only flagged pairs
+      if (!p.first_seen || p.first_seen < newCutoff) continue;
+    }
+    // activeReasons is the COMPLEMENT of the unchecked reason checkboxes
+    // (null when nothing is excluded -> no reason filtering). The pair must
+    // have at least one flag whose reason short-name is still selected.
+    if (activeReasons) {
+      let any = false;
+      for (const f of allFlags) {
+        if (activeReasons.has(f.kind.split(":").pop())) { any = true; break; }
+      }
+      if (!any) continue;
+    }
+    out.push(i);
+  }
+  if (sortMode === "suspicion") {
+    // Sort by the same number the sidebar shows -- count of distinct
+    // algorithmic checks that fire on the pair. Ties broken by ISO then var
+    // so the row order is deterministic.
+    const issueCount = (p) => {
+      const kinds = new Set();
+      for (const f of pairAllFlags(p)) kinds.add(f.kind.split(":").pop());
+      return kinds.size;
+    };
+    out.sort((a, b) => {
+      const da = issueCount(STATE.data.pairs[a]);
+      const db = issueCount(STATE.data.pairs[b]);
+      if (db !== da) return db - da;
+      const pa = STATE.data.pairs[a], pb = STATE.data.pairs[b];
+      if (pa.iso3 !== pb.iso3) return pa.iso3 < pb.iso3 ? -1 : 1;
+      return pa.var < pb.var ? -1 : 1;
+    });
+  }
+  STATE.filteredIdx = out;
+}
+
+function renderSidebar() {
+  applyFilter();
+  // counts (over full dataset, not filter)
+  let approved = 0, commented = 0, both = 0, limitation = 0, none = 0;
+  for (const p of STATE.data.pairs) {
+    const st = statusOf(pairKey(p));
+    if (st === "approved") approved++;
+    else if (st === "commented") commented++;
+    else if (st === "both") both++;
+    else if (st === "limitation") limitation++;
+    else none++;
+  }
+  const total = STATE.data.pairs.length;
+  const reviewed = approved + commented + both + limitation;
+  // Single-line count; ✓/●/○ breakdown went here originally but added
+  // more noise than information.
+  $("counts").innerHTML = `<b>${reviewed}</b>/${total} reviewed`;
+
+  const list = $("pairs");
+  list.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  for (const i of STATE.filteredIdx) {
+    const p = STATE.data.pairs[i];
+    const key = pairKey(p);
+    const st = statusOf(key);
+    const el = document.createElement("div");
+    el.className = "pair" + (i === STATE.currentIdx ? " current" : "");
+    el.dataset.idx = i;
+    // Count distinct algorithmic checks that fired on this pair (e.g.
+    // "outlier" + "lvl10" + "break" = 3 issues). Source attribution and
+    // year specificity are shown in the chart's table; the sidebar just
+    // tells the reviewer how many distinct check types fire.
+    const kinds = new Set();
+    for (const f of pairAllFlags(p)) kinds.add(f.kind.split(":").pop());
+    const tooltip = kinds.size
+      ? [...kinds].sort().map((k) => REASON_INFO[k]?.label || k).join(", ")
+      : "no algorithmic flags";
+    const issuesHtml = kinds.size
+      ? `<span class="issues" title="${escapeHtml(tooltip)}">${kinds.size} issue${kinds.size === 1 ? "" : "s"}</span>`
+      : `<span class="issues none" title="no algorithmic flags">—</span>`;
+    el.innerHTML = `<span class="dot ${st}" title="${st}"></span>` +
+                   `<span class="iso">${p.iso3}</span>` +
+                   `<span class="var">${p.var}</span>` +
+                   issuesHtml;
+    el.onclick = () => goTo(i);
+    frag.appendChild(el);
+  }
+  list.appendChild(frag);
+  // Scroll current into view
+  const cur = list.querySelector(".pair.current");
+  if (cur) cur.scrollIntoView({ block: "nearest" });
+}
+
+function fmtNum(v) {
+  if (v == null || Number.isNaN(v)) return "";
+  const a = Math.abs(v);
+  if (a !== 0 && (a >= 1e6 || a < 0.001)) return v.toExponential(3);
+  if (a >= 100) return v.toFixed(1);
+  if (a >= 1) return v.toFixed(3);
+  return v.toFixed(5);
+}
+
+function renderChartAndTable() {
+  if (!STATE.data) return;
+  const p = STATE.data.pairs[STATE.currentIdx];
+  if (!p) return;
+  const key = pairKey(p);
+  const sources = STATE.data.data[key] || {};
+  const allSources = Object.keys(sources);
+  // Column order: GMD (the spliced anchor) first if present, then all
+  // other sources alphabetical. No Mitchell privilege; if a pair has
+  // no Mitchell data at all, Mitchell simply doesn't appear in `order`.
+  const rest = allSources.filter((s) => s !== "GMD").sort();
+  const order = allSources.includes("GMD") ? ["GMD", ...rest] : rest;
+
+  const mode = $("viewmode").dataset.value;
+  // For rebased view, the anchor year defaults to the latest year where
+  // Mitchell + at least one peer overlap. The user can override it via the
+  // input to interrogate different historical periods (esp. for index vars
+  // like CPI/HPI/REER where the visual story flips depending on the base).
+  let anchorYear = null;
+  if (mode === "rebased") {
+    const auto = pickAnchorYear(sources);
+    const userInput = parseInt($("anchor-year").value, 10);
+    anchorYear = Number.isFinite(userInput) ? userInput : auto;
+    // Surface the controls + remember the auto value for the placeholder
+    $("anchor-controls").style.display = "";
+    if (auto != null) $("anchor-year").placeholder = String(auto);
+    if (!Number.isFinite(userInput) && auto != null) {
+      // Don't overwrite the user's intentional input; only seed if blank
+      $("anchor-year").value = "";  // empty = follow auto
+    }
+  } else {
+    $("anchor-controls").style.display = "none";
+  }
+
+  // Transform every series according to the current view mode
+  const transformed = {};
+  for (const src of order) {
+    transformed[src] = transformSeries(sources[src] || [], mode, anchorYear);
+  }
+
+  // Pre-compute the GMD anchor map once so each peer's r and ρ can go
+  // into the Plotly legend label as a small second line ("r=1.02 ρ=0.99").
+  // Coloured red when off-band so a glance at the legend tells the same
+  // story the (now-removed) ratio panel used to.
+  const gmdSeries = sources["GMD"] || [];
+  const gmdMap = {};
+  for (const [y, v] of gmdSeries) gmdMap[y] = v;
+  function legendLabel(src, untransformedSeries) {
+    if (src === "GMD") return "GMD";
+    // median(GMD/src) on positive overlap
+    const ratios = [];
+    for (const [y, v] of untransformedSeries) {
+      const gv = gmdMap[y];
+      if (gv == null || v == null || v === 0 || gv * v <= 0) continue;
+      ratios.push(gv / v);
+    }
+    let r = null;
+    if (ratios.length >= 3) {
+      ratios.sort((a, b) => a - b);
+      r = ratios[Math.floor(ratios.length / 2)];
+    }
+    const corr = yoyCorrelation(gmdSeries, untransformedSeries);
+    const rPart = (r != null) ? fmtRatio(r) : "–";
+    const cPart = (corr.rho != null) ? corr.rho.toFixed(2) : "–";
+    const rBad  = (r != null && (r > 1.5 || r < 0.5));
+    const cBad  = (corr.rho != null && corr.n >= 5 && corr.rho < 0.3);
+    const rCol  = rBad ? "#dc2626" : "#777";
+    const cCol  = cBad ? "#dc2626" : "#777";
+    return src + `<br>`
+      + `<span style="font-size:10px">`
+      + `<span style="color:${rCol}">r=${rPart}</span> `
+      + `<span style="color:${cCol}">ρ=${cPart}</span>`
+      + `</span>`;
+  }
+
+  // --- Y-axis scale decision (linear / log / symlog) -----------------------
+  // Log is requested via the checkbox. All-positive series use a native log
+  // axis. Series with zero/negative values (CA_GDP deficits, govdef, CA_USD)
+  // can't sit on a log axis directly, so we use a SYMMETRIC-LOG transform:
+  // each side of zero is log-compressed independently around a small linear
+  // zone through 0. Plotly has no native symlog, so we transform the plotted
+  // y ourselves and relabel the ticks back to real units (originals are kept
+  // in customdata so hover/tooltip still show true values).
+  const logRequested = $("logscale").checked;
+  const anyNonPos = order.some((src) => seriesHasNonPositive(transformed[src] || []));
+  let yMode = "linear";                       // "linear" | "log" | "symlog"
+  if (logRequested && mode !== "yoy") yMode = anyNonPos ? "symlog" : "log";
+
+  // linthresh for symlog: half-width of the near-zero linear zone. Pick it a
+  // few decades below the peak magnitude so the bulk of the range is log.
+  let symC = 1, symYmin = 0, symYmax = 0;
+  if (yMode === "symlog") {
+    let mx = 0, mn = Infinity;
+    for (const src of order) for (const d of (transformed[src] || [])) {
+      if (d[1] == null) continue;
+      if (d[1] < symYmin) symYmin = d[1];
+      if (d[1] > symYmax) symYmax = d[1];
+      const a = Math.abs(d[1]);
+      if (a === 0) continue;
+      if (a > mx) mx = a;
+      if (a < mn) mn = a;
+    }
+    if (!(mx > 0)) mx = 1;
+    symC = Math.max(mx / 1000, Number.isFinite(mn) ? mn : mx / 1000);
+    if (!(symC > 0)) symC = 1;
+  }
+  const yfwd = (v) => (yMode === "symlog" ? symlogFwd(v, symC) : v);
+
+  const traces = order.map((src) => {
+    const series = transformed[src];
+    const hidden = currentHiddenSet().has(src);
+    // "GMD" is the final spliced output (not a raw source). Render it
+    // thicker, dashed, and black so it's instantly distinguishable.
+    const isGMD = src === "GMD";
+    return {
+      x: series.map((d) => d[0]),
+      // Plotted y is symlog-transformed when yMode==="symlog"; raw otherwise.
+      y: series.map((d) => (d[1] == null ? null : yfwd(d[1]))),
+      // True value for every point, for hover/tooltip + Y-window refit.
+      customdata: series.map((d) => d[1]),
+      mode: "lines+markers",
+      // Two-line legend label: source name on top, r/ρ vs GMD below.
+      // Obs count is gone (was redundant with the chart density).
+      name: legendLabel(src, sources[src] || []),
+      line: isGMD ? { width: 2.25, color: "#1a202c", dash: "dash" } : { width: 1.25 },
+      marker: isGMD ? { size: 4, color: "#1a202c" } : { size: 3 },
+      hovertemplate: "%{x}: %{customdata:.6g}<extra>" + src + "</extra>",
+      // `visible: "legendonly"` keeps the trace in the legend so it can be
+      // re-enabled from there too — kept in sync with hiddenSources.
+      visible: hidden ? "legendonly" : true,
+      // Stash the bare source name so the legend click handler can map back
+      // to STATE.hiddenSources without parsing the display name.
+      meta: src,
+    };
+  });
+
+  // Axis title (scale decided above).
+  let yTitle = p.var;
+  if (mode === "yoy") yTitle = `${p.var} (YoY %)`;
+  else if (mode === "rebased" && anchorYear) yTitle = `${p.var} (${anchorYear} = 100)`;
+
+  // Vertical guide at the anchor year for rebased view, so the user sees
+  // exactly where the "= 100" pin is.
+  const shapes = [];
+  const annotations = [];
+  if (mode === "rebased" && anchorYear != null) {
+    shapes.push({
+      type: "line", xref: "x", yref: "paper",
+      x0: anchorYear, x1: anchorYear, y0: 0, y1: 1,
+      line: { color: "#9ca3af", width: 1, dash: "dot" },
+    });
+    annotations.push({
+      x: anchorYear, y: 1, xref: "x", yref: "paper",
+      text: `anchor: ${anchorYear}`, showarrow: false,
+      font: { size: 10, color: "#6b7280" },
+      bgcolor: "rgba(255,255,255,0.85)", bordercolor: "#e5e7eb", borderwidth: 1,
+      borderpad: 2, yanchor: "bottom",
+    });
+  }
+
+  // Preserve user-zoom across re-renders that don't change the underlying
+  // presentation (same pair + same view mode + same log/linear). When the
+  // user moves to another pair, switches view-mode, or toggles log, we let
+  // Plotly auto-fit. Inside the same presentation — e.g. clicking the chart
+  // to change the rebase anchor — the existing zoom window survives.
+  // Double-click on the chart resets autorange to true, so the next render
+  // will read autorange=true and auto-fit normally.
+  const chartEl = $("chart");
+  const fingerprint = `${pairKey(p)}|${mode}|${yMode}`;
+  const samePresentation = chartEl._lastFingerprint === fingerprint;
+  chartEl._lastFingerprint = fingerprint;
+  // Tufte: no vertical grid (years don't need it), just a faint baseline +
+  // outside ticks. The clickable tick labels carry the year context.
+  const xaxis = {
+    title: "Year", showgrid: false, zeroline: false,
+    showline: true, linecolor: INK_FAINT, linewidth: 1, mirror: false,
+    ticks: "outside", ticklen: 4, tickcolor: INK_FAINT,
+  };
+  // Pin the X-axis to the actual data range so Plotly's auto-axis padding
+  // doesn't extend the chart past the last observed year (e.g. UK infl
+  // ending at 2024 was being drawn out to 2040 by autorange padding).
+  {
+    let xLo = Infinity, xHi = -Infinity;
+    for (const t of traces) {
+      for (const x of (t.x || [])) {
+        if (!Number.isFinite(x)) continue;
+        if (x < xLo) xLo = x;
+        if (x > xHi) xHi = x;
+      }
+    }
+    if (Number.isFinite(xLo) && Number.isFinite(xHi)) {
+      xaxis.range = [xLo, xHi];
+      xaxis.autorange = false;
+    }
+  }
+  // Lock Y zoom from user interaction: this makes the drag-zoom selector
+  // horizontal-only (the rectangle extends the full chart height, the user
+  // is only choosing an X window). Our plotly_relayout handler then re-fits
+  // the Y axis programmatically — Plotly.relayout() bypasses fixedrange, so
+  // we can still set the Y range from code.
+  const axisIsLog = (yMode === "log");
+  // A single zero reference line earns its ink only when the data straddles
+  // zero (symlog, or linear levels that go negative). Otherwise it's chartjunk.
+  const zeroInRange =
+    (yMode === "symlog") ||
+    (yMode === "linear" && order.some((src) => seriesHasNonPositive(transformed[src] || [])));
+  const yaxis = {
+    title: yTitle, type: axisIsLog ? "log" : "linear", fixedrange: true,
+    // Faint horizontal grid only — enough to read a value off, no more.
+    showgrid: true, gridcolor: GRID_FAINT, gridwidth: 1,
+    showline: false, ticks: "outside", ticklen: 4, tickcolor: INK_FAINT,
+    zeroline: zeroInRange, zerolinecolor: ZERO_LINE, zerolinewidth: 1,
+  };
+  // Symlog: relabel the linear (transformed) axis with ticks at real values
+  // 0, ±1, ±3, ±10, ±30, ... spanning the data, transformed into plot space.
+  if (yMode === "symlog") {
+    const t = symlogTicks(symC, symYmin, symYmax);
+    yaxis.tickvals = t.tickvals;
+    yaxis.ticktext = t.ticktext;
+  }
+  if (samePresentation && chartEl.layout) {
+    const prev = chartEl.layout;
+    if (prev.xaxis && prev.xaxis.autorange === false && Array.isArray(prev.xaxis.range)) {
+      xaxis.range = prev.xaxis.range.slice();
+      xaxis.autorange = false;
+      // X window is locked → refit Y to whatever data falls inside it RIGHT
+      // NOW (traces may have changed under us, e.g. user clicked a new rebase
+      // anchor, toggled a source, etc.). Preserving the old Y range would
+      // leave the chart pointed at empty space. Symlog plots transformed y on
+      // a linear axis, so the fit is linear over the transformed values.
+      const yr = computeYRangeForXWindow(traces, xaxis.range[0], xaxis.range[1], axisIsLog);
+      if (yr) { yaxis.range = yr; yaxis.autorange = false; }
+    }
+  }
+
+  Plotly.react("chart", traces, {
+    margin: { t: 10, l: 60, r: 16, b: 36 },
+    colorway: MUTED_COLORWAY,
+    font: CHART_FONT,
+    paper_bgcolor: "rgba(0,0,0,0)",
+    // Solid (white) plot area: Plotly derives the box-zoom selection fill from
+    // this; a transparent bg makes the selection band invisible (only the tiny
+    // corner marks show).
+    plot_bgcolor: "#ffffff",
+    xaxis,
+    yaxis,
+    legend: { orientation: "h", y: -0.18, traceorder: "normal",
+              font: { size: 11, color: INK }, bgcolor: "rgba(0,0,0,0)" },
+    // hovermode "closest" shows ONE nearest data point per hover, labeled
+    // with its own year + value. No "x unified" projection (which was what
+    // hovermode "x" lets Plotly emit one hover event listing every trace's
+    // nearest point to the cursor x. Our custom plotly_hover handler then
+    // filters down to traces with data AT THE EXACT cursor year (so a
+    // trace whose nearest point is at 1995 when the cursor is on 1997
+    // doesn't appear). The native unified label is hidden via CSS; the
+    // popup we render replaces it.
+    hovermode: "x",
+    // Pin drag behavior to box-zoom so the chart always responds to drag the
+    // way the user expects (combined with yaxis.fixedrange = X-only zoom).
+    dragmode: "zoom",
+    shapes, annotations,
+  }, {
+    responsive: true,
+    displaylogo: false,
+    // No toolbar: drag still box-zooms (that's dragmode, not the buttons) and
+    // double-click resets, so the modebar's zoom/reset buttons add nothing.
+    displayModeBar: false,
+    // Disable Plotly's built-in double-click reset: with our pinned
+    // xaxis.range (autorange:false) it doesn't reliably restore the full view.
+    // We handle double-click ourselves (see resetZoom).
+    doubleClick: false,
+  });
+
+  // The chart container may have been display:none (e.g. while the Findings
+  // tab was open), which leaves Plotly with a stale 0-width layout that paints
+  // nothing. `responsive:true` only re-measures on window resize, not on a
+  // hidden->visible transition, so re-measure on the next frame: this makes
+  // every navigation that lands here (sidebar click, tab switch, arrow keys)
+  // show a correctly sized chart.
+  requestAnimationFrame(() => { try { Plotly.Plots.resize(chartEl); } catch (_) {} });
+
+  // Wire clickable x-axis tick labels: clicking a year filters the
+  // chart + table to start at that year. Re-attached after every
+  // Plotly.react because Plotly redraws the tick <text> elements.
+  wireXTickClicks();
+
+  // Click-to-rebase: in `rebased` mode, clicking a point on the chart sets
+  // that year as the anchor. Attach the listener once after the first plot
+  // (Plotly's .on() API is only available after newPlot/react), then guard
+  // by current view mode inside the handler so other modes ignore clicks.
+  if (!chartEl._clickWired) {
+    chartEl._clickWired = true;
+    // Full zoom-out on double-click. Restoring the full view = drop the table
+    // year-filter + clear the saved fingerprint so the next render skips the
+    // zoom-preserve branch and re-pins X to full range + autofits Y. We THEN
+    // force the axes via Plotly.relayout: Plotly.react alone does not reliably
+    // drop a zoom the user applied interactively, so the re-render isn't
+    // enough. _autoYInProgress stops our own relayout handler from re-firing.
+    const resetZoom = () => {
+      STATE.tableXRange = null;
+      chartEl._lastFingerprint = null;
+      renderChartAndTable();
+      let xLo = Infinity, xHi = -Infinity;
+      for (const t of (chartEl.data || []))
+        for (const x of (t.x || [])) {
+          if (!Number.isFinite(x)) continue;
+          if (x < xLo) xLo = x;
+          if (x > xHi) xHi = x;
+        }
+      chartEl._autoYInProgress = true;
+      const relayout = Number.isFinite(xLo) && Number.isFinite(xHi)
+        ? { "xaxis.range": [xLo, xHi], "yaxis.autorange": true }
+        : { "xaxis.autorange": true, "yaxis.autorange": true };
+      Plotly.relayout(chartEl, relayout)
+        .finally(() => { chartEl._autoYInProgress = false; });
+    };
+    // Two detection paths, because Plotly's drag layer often preventDefault()s
+    // mousedown, which can stop the browser from synthesizing `dblclick`:
+    //  (1) a native dblclick listener in the CAPTURE phase (works when the
+    //      event is still generated), and
+    //  (2) our own detector from two rapid mousedowns near the same spot.
+    // Thresholds are generous (trackpad double-taps jitter in time + position).
+    chartEl.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      resetZoom();
+    }, true);
+    chartEl.addEventListener("mousedown", (e) => {
+      const now = Date.now();
+      if (chartEl._lastMd && (now - chartEl._lastMd) < 500 &&
+          Math.abs(e.clientX - chartEl._lastMdX) < 18 &&
+          Math.abs(e.clientY - chartEl._lastMdY) < 18) {
+        chartEl._lastMd = 0;
+        e.preventDefault();
+        e.stopPropagation();
+        resetZoom();
+        return;
+      }
+      chartEl._lastMd = now;
+      chartEl._lastMdX = e.clientX;
+      chartEl._lastMdY = e.clientY;
+    }, true);
+    // Track cursor for positioning the custom hover popup.
+    chartEl.addEventListener("mousemove", (e) => {
+      chartEl._lastMouseX = e.clientX;
+      chartEl._lastMouseY = e.clientY;
+    });
+    chartEl.addEventListener("mouseleave", () => {
+      $("custom-hover").style.display = "none";
+    });
+    // Custom hover popup with rows sorted by Y value descending — replaces
+    // Plotly's default unified label (hidden via CSS) which is unsortable.
+    chartEl.on("plotly_hover", (data) => {
+      const allPts = (data?.points || []).filter((p) => p && Number.isFinite(p.y));
+      if (!allPts.length) { $("custom-hover").style.display = "none"; return; }
+      // Plotly's hovermode="x" snaps every trace to its nearest point. We
+      // want only the traces with data AT THE CURSOR'S YEAR. Pick the
+      // anchor year (cursor x rounded to the nearest integer) and keep
+      // only points whose own x equals that year.
+      const anchor = data?.xvals?.[0];
+      const yearRaw = (anchor != null) ? anchor : allPts[0].x;
+      const year = Math.round(Number(yearRaw));
+      const points = allPts.filter((p) => Math.round(Number(p.x)) === year);
+      if (!points.length) { $("custom-hover").style.display = "none"; return; }
+      // Largest at top
+      points.sort((a, b) => b.y - a.y);
+      const tip = $("custom-hover");
+      const parts = [`<div class="year">${escapeHtml(String(year))}</div>`];
+      for (const p of points) {
+        const src = (p.fullData && p.fullData.meta) || p.data?.name || "";
+        const color = p.fullData?.line?.color || p.fullData?.marker?.color || "#888";
+        // p.y is the plotted (possibly symlog-transformed) value; customdata
+        // holds the true value, so show that.
+        const real = (p.customdata != null) ? p.customdata : p.y;
+        const val = (real == null) ? "—" : fmtNum(real);
+        parts.push(
+          `<div class="row">` +
+          `<span class="swatch" style="background:${color}"></span>` +
+          `<span class="src">${escapeHtml(src)}</span>` +
+          `<span class="val">${escapeHtml(val)}</span>` +
+          `</div>`
+        );
+      }
+      tip.innerHTML = parts.join("");
+      tip.style.display = "block";
+      // Place to the right + below the cursor; flip to the left if it would
+      // run off the viewport.
+      const margin = 12;
+      let x = (chartEl._lastMouseX || 0) + margin;
+      let y = (chartEl._lastMouseY || 0) + margin;
+      // After display:block, measure and adjust
+      const w = tip.offsetWidth, h = tip.offsetHeight;
+      if (x + w > window.innerWidth - 8) x = (chartEl._lastMouseX || 0) - w - margin;
+      if (y + h > window.innerHeight - 8) y = (chartEl._lastMouseY || 0) - h - margin;
+      tip.style.left = x + "px";
+      tip.style.top = y + "px";
+    });
+    chartEl.on("plotly_unhover", () => {
+      $("custom-hover").style.display = "none";
+    });
+    chartEl.on("plotly_click", (data) => {
+      if ($("viewmode").dataset.value !== "rebased") return;
+      if (!data?.points?.length) return;
+      const yr = Math.round(data.points[0].x);
+      if (!Number.isFinite(yr)) return;
+      $("anchor-year").value = String(yr);
+      renderChartAndTable();
+    });
+    // Keep STATE.hiddenSources in sync when the user clicks the legend.
+    // Returning false prevents Plotly's default toggle so we own the state.
+    chartEl.on("plotly_legendclick", (evt) => {
+      const src = evt.fullData[evt.curveNumber]?.meta;
+      if (!src) return true;
+      toggleSourceVisibility(src);
+      return false;
+    });
+
+    // X-only zoom: after the user box-zooms or pans on the X axis, force the
+    // Y axis to auto-fit to the data inside that X window. Default Plotly box-
+    // zoom uses whatever vertical extent the user happened to drag, which is
+    // rarely what they want — they want "show me everything in this time
+    // window". Double-click resets both axes (Plotly default).
+    chartEl.on("plotly_relayout", (event) => {
+      if (chartEl._autoYInProgress) return;
+      // Modebar "Reset axes" → autorange. Use the same deterministic reset as
+      // double-click: clear the table year-filter + the saved fingerprint so
+      // the next render skips the zoom-preserve branch and re-pins X to the
+      // full data range + autofits Y. (A Plotly.relayout dance here raced with
+      // the re-render and left the view partly zoomed.)
+      if (event["xaxis.autorange"] === true || event["yaxis.autorange"] === true) {
+        resetZoom();
+        return;
+      }
+      // Only fire when the X range changed via user interaction
+      const x0 = event["xaxis.range[0]"];
+      const x1 = event["xaxis.range[1]"];
+      if (x0 == null || x1 == null) return;
+      const yIsLog = chartEl.layout?.yaxis?.type === "log";
+      const yRange = computeYRangeForXWindow(chartEl.data || [], x0, x1, yIsLog);
+      // Restrict the table view to the selected window. Round the bounds
+      // so 1980.34 -> 1980 etc.; the table is integer-year-indexed.
+      STATE.tableXRange = [Math.floor(x0), Math.ceil(x1)];
+      renderChartAndTable();
+      if (!yRange) return;
+      chartEl._autoYInProgress = true;
+      Plotly.relayout(chartEl, { "yaxis.range": yRange, "yaxis.autorange": false })
+        .finally(() => { chartEl._autoYInProgress = false; });
+    });
+    // Double-click on the data table itself also resets to the full view
+    // (parallels the chart's double-click behaviour).
+    $("tbl-wrap").addEventListener("dblclick", () => {
+      if (STATE.tableXRange) resetZoom();
+    });
+  }
+  // Cursor hint: crosshair only when click-to-anchor is active
+  chartEl.style.cursor = (mode === "rebased") ? "crosshair" : "";
+
+  // Visual hint about how the log toggle is being applied.
+  const logActive = (yMode === "log" || yMode === "symlog");
+  $("logscale").parentElement.title =
+    (mode === "yoy" && logRequested)
+      ? "log scale doesn't apply to YoY % (values can be negative)"
+      : yMode === "symlog"
+        ? "symmetric-log: log-compressed each side of zero (handles negatives)"
+        : "";
+  // Dim only when the user asked for log but it truly can't apply (YoY).
+  $("logscale").parentElement.style.opacity =
+    (logRequested && !logActive) ? "0.45" : "1";
+
+  // meta line is intentionally empty -- year range / obs count / suspicion
+  // total were redundant with the chart + ratio panel + sidebar badge.
+  $("meta").textContent = "";
+
+  // The ratio panel is gone -- r/ρ vs GMD now appear under each source
+  // name in the Plotly chart legend, eliminating the duplicate listing.
+  $("ratio-panel").innerHTML = "";
+
+  // Flags banner
+  // Per-source + per-cell flag annotations are baked into the data table below.
+  // renderFlags() (which used to write a messy banner here) is now a no-op.
+
+  // Build maps + per-source ordered years for YoY checks. If the user has
+  // zoomed the chart to a sub-range, restrict the table to that range too
+  // (STATE.tableXRange is set/cleared by the plotly_relayout / double-click
+  // handlers).
+  const yearSet = new Set();
+  for (const s of order) for (const d of sources[s] || []) yearSet.add(d[0]);
+  let years = [...yearSet].sort((a, b) => a - b);
+  if (STATE.tableXRange) {
+    const [lo, hi] = STATE.tableXRange;
+    years = years.filter((y) => y >= lo && y <= hi);
+  }
+  const maps = {};
+  const sortedYears = {};
+  for (const s of order) {
+    maps[s] = {};
+    sortedYears[s] = [];
+    for (const d of sources[s] || []) {
+      maps[s][d[0]] = d[1];
+      sortedYears[s].push(d[0]);
+    }
+    sortedYears[s].sort((a, b) => a - b);
+  }
+  // For each (source, year) compute YoY ratio vs the previous non-null year for THAT source.
+  // Red-highlight when |log10(ratio)| >= 0.7 (>=5x or <=1/5x).
+  const yoyClass = {};  // yoyClass[src][year] = "yoy-up" | "yoy-dn" | ""
+  for (const s of order) {
+    yoyClass[s] = {};
+    const ys = sortedYears[s];
+    for (let i = 1; i < ys.length; i++) {
+      const yPrev = ys[i - 1], yCur = ys[i];
+      const v0 = maps[s][yPrev], v1 = maps[s][yCur];
+      if (v0 == null || v1 == null || v0 === 0) continue;
+      if (v0 * v1 < 0) continue; // sign flips handled separately if needed
+      const r = v1 / v0;
+      const lr = Math.log10(Math.abs(r));
+      if (lr >= 0.7) yoyClass[s][yCur] = "yoy-up";
+      else if (lr <= -0.7) yoyClass[s][yCur] = "yoy-dn";
+    }
+  }
+
+  // Per-cell peer-ratio shading: GMD (the final spliced output) is the
+  // anchor. For each (year, source) cell we compute source_value / GMD_value
+  // at the same year and color by |ratio - 1|. If GMD has no value at that
+  // year (or the source is GMD itself) the cell stays unshaded. The
+  // earlier Mitchell-anchored / no-anchor variants are gone -- if any
+  // source is "crazy" off, its cell goes red against GMD.
+  const TIGHT = 0.05, MILD = 0.40;
+  const anchor = "GMD";
+  // For index variables (CPI, rGDP, REER, HPI, deflator) different sources
+  // pick different base years, so the level ratio against GMD is
+  // mechanically off without any unit bug. Skip the per-cell ratio
+  // shading entirely on those variables -- the chart's growth-mode and
+  // the engine's growth-rate checks are the meaningful comparisons.
+  const INDEX_VARS_JS = new Set(["REER", "HPI", "CPI", "deflator", "rGDP"]);
+  const skipRatioShading = INDEX_VARS_JS.has(p.var);
+
+  // Build flag indices for this pair: bySource lets us redden the column
+  // header for any source with at least one flag, with the issue list on
+  // hover; byCell reddens individual (year, source) cells for year-specific
+  // flags (e.g. spike, break, outlier in 1985).
+  const flagBySource = {};
+  const flagByCell = {};
+  for (const f of pairAllFlags(p)) {
+    if (!f.src) continue;
+    const short = f.kind.split(":").pop();
+    let label = REASON_INFO[short]?.label || short;
+    if (f.raw && short === "spike" && f.raw.y != null) label = `single-year spike (${f.raw.y})`;
+    else if (f.raw && short === "lvl10" && f.raw.p != null) {
+      label = `off by 10${supDigits(Math.abs(f.raw.p))} vs ${f.raw.n} peers`;
+    } else if (f.raw && short === "yoy" && f.raw.n != null) {
+      label = `${f.raw.n} large YoY jump${f.raw.n > 1 ? "s" : ""}`;
+    }
+    (flagBySource[f.src] ||= new Set()).add(label);
+    if (f.year != null) {
+      const k = f.src + "|" + f.year;
+      (flagByCell[k] ||= new Set()).add(label);
+    }
+  }
+
+  let html = "<table><thead><tr><th>Year</th>";
+  for (const s of order) {
+    const issues = flagBySource[s];
+    if (issues && issues.size) {
+      const tip = [...issues].sort().join(" · ");
+      // No native `title` -- popover is click-driven so it doesn't appear
+      // accidentally on hover. The data-issues + data-src attributes feed
+      // the popover handler attached at the end of this function.
+      html += `<th class="src-flagged" data-src="${escapeHtml(s)}" `
+            + `data-issues="${escapeHtml(tip)}">${s} ⚑</th>`;
+    } else {
+      html += `<th>${s}</th>`;
+    }
+  }
+  html += "</tr></thead><tbody>";
+  for (const y of years) {
+    html += `<tr><td>${y}</td>`;
+    const av = maps[anchor]?.[y];
+    for (const s of order) {
+      const cls = [];
+      const v = maps[s][y];
+      const yoy = yoyClass[s][y];
+      let title = "";
+      const cellFlags = flagByCell[s + "|" + y];
+      if (cellFlags && cellFlags.size) {
+        // Year-specific flag wins -- explicit red cell, full reason list on hover.
+        cls.push("flag-cell");
+        title = ` title="${escapeHtml([...cellFlags].sort().join(' · '))}"`;
+      } else if (yoy) {
+        // YoY anomaly (within-source jump) takes visual priority over ratio shading.
+        cls.push(yoy);
+        if (v != null) title = ` title="YoY ${yoy === "yoy-up" ? "↑" : "↓"}5×+"`;
+      } else if (!skipRatioShading && s !== anchor && v != null && av != null && av !== 0 && av * v > 0) {
+        const ratio = v / av;
+        const dev = Math.abs(ratio - 1);
+        if (dev <= TIGHT) cls.push("vs-mit-green");
+        else if (dev <= MILD) cls.push("vs-mit-orange");
+        else cls.push("vs-mit-red");
+        title = ` title="${ratio.toFixed(3)}× ${anchor} (anchor) at ${y}"`;
+      }
+      html += `<td class="${cls.join(" ")}"${title}>${fmtNum(v)}</td>`;
+    }
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+  $("tbl-wrap").innerHTML = html;
+
+  // Wire click-to-toggle popover on every flagged column header. Clicking
+  // again on the same header closes it; clicking another opens that one.
+  // Outside clicks close (handled once globally in bind()).
+  const pop = $("flag-popover");
+  $("tbl-wrap").querySelectorAll("th.src-flagged").forEach((th) => {
+    th.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const wasOpen = th.classList.contains("open");
+      // Reset all other open headers.
+      $("tbl-wrap").querySelectorAll("th.src-flagged.open")
+        .forEach((x) => x.classList.remove("open"));
+      if (wasOpen) {
+        pop.style.display = "none";
+        return;
+      }
+      th.classList.add("open");
+      const src = th.dataset.src;
+      const issues = (th.dataset.issues || "").split(" · ").filter(Boolean);
+      pop.innerHTML =
+        `<h4>${escapeHtml(src)} — ${issues.length} issue${issues.length === 1 ? "" : "s"}</h4>` +
+        `<ul>${issues.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`;
+      pop.style.display = "block";
+      // Position below the clicked header; flip up if it would overflow.
+      const r = th.getBoundingClientRect();
+      const pw = pop.offsetWidth, ph = pop.offsetHeight;
+      let x = r.left, y = r.bottom + 4;
+      if (x + pw > window.innerWidth - 8) x = window.innerWidth - pw - 8;
+      if (y + ph > window.innerHeight - 8) y = r.top - ph - 4;
+      pop.style.left = Math.max(8, x) + "px";
+      pop.style.top = Math.max(8, y) + "px";
+    });
+  });
+}
+
+// ---- numeric helpers --------------------------------------------------------
+
+function computeYoY(series) {
+  // Returns array of [year, %change-vs-prev-year]. Skips non-consecutive
+  // years, sign-changes, and zero/null prev values (growth undefined).
+  const out = [];
+  for (let i = 1; i < series.length; i++) {
+    const [yPrev, vPrev] = series[i - 1];
+    const [yCur, vCur] = series[i];
+    if (yCur !== yPrev + 1) continue;
+    if (vPrev == null || vCur == null || vPrev === 0) continue;
+    if (vPrev * vCur < 0) continue;
+    out.push([yCur, (vCur - vPrev) / Math.abs(vPrev) * 100]);
+  }
+  return out;
+}
+
+function pearsonR(xs, ys) {
+  const n = xs.length;
+  if (n < 5) return null;
+  let sx = 0, sy = 0;
+  for (let i = 0; i < n; i++) { sx += xs[i]; sy += ys[i]; }
+  const mx = sx / n, my = sy / n;
+  let num = 0, dx = 0, dy = 0;
+  for (let i = 0; i < n; i++) {
+    const ax = xs[i] - mx, ay = ys[i] - my;
+    num += ax * ay;
+    dx += ax * ax;
+    dy += ay * ay;
+  }
+  if (dx === 0 || dy === 0) return null;
+  return num / Math.sqrt(dx * dy);
+}
+
+function yoyCorrelation(seriesM, seriesP) {
+  // Pearson correlation of YoY % changes over years where BOTH have a YoY value.
+  const yoyM = Object.fromEntries(computeYoY(seriesM));
+  const yoyP = Object.fromEntries(computeYoY(seriesP));
+  const xs = [], ys = [];
+  for (const y of Object.keys(yoyM)) {
+    if (yoyP[y] == null) continue;
+    xs.push(yoyM[y]);
+    ys.push(yoyP[y]);
+  }
+  return { rho: pearsonR(xs, ys), n: xs.length };
+}
+
+function pickAnchorYear(sources) {
+  // Latest year where Mitchell has data AND at least one peer also has data —
+  // anchors all series at the same modern reference point (rebased = 100 there).
+  const m = sources["Mitchell"] || [];
+  const mYears = new Set(m.filter((d) => d[1] != null).map((d) => d[0]));
+  if (!mYears.size) return null;
+  // Collect peer-data years in descending order
+  const peerYears = new Set();
+  for (const [src, ser] of Object.entries(sources)) {
+    if (src === "Mitchell") continue;
+    for (const [y, v] of ser) if (v != null) peerYears.add(y);
+  }
+  const candidates = [...mYears].filter((y) => peerYears.has(y)).sort((a, b) => b - a);
+  return candidates[0] ?? null;
+}
+
+function transformSeries(series, mode, anchorYear) {
+  if (!series || series.length === 0) return series || [];
+  if (mode === "yoy") return computeYoY(series);
+  if (mode === "rebased" && anchorYear != null) {
+    // Use the value AT anchorYear if present; otherwise the closest year.
+    let bestVal = null, bestDist = Infinity;
+    for (const [y, v] of series) {
+      if (v == null || v === 0) continue;
+      const d = Math.abs(y - anchorYear);
+      if (d < bestDist) { bestDist = d; bestVal = v; }
+    }
+    if (bestVal == null) return [];
+    return series.map(([y, v]) => [y, v == null ? null : (v * 100 / bestVal)]);
+  }
+  return series;
+}
+
+function seriesHasNonPositive(series) {
+  for (const [, v] of series) if (v != null && v <= 0) return true;
+  return false;
+}
+
+// Symmetric-log transform: log-compress magnitudes on each side of zero with
+// a linear zone of half-width C through the origin. Continuous, monotonic,
+// fwd(0)=0. Lets a "log" axis represent series that contain negatives.
+function symlogFwd(v, C) {
+  return Math.sign(v) * Math.log10(1 + Math.abs(v) / C);
+}
+// Tick positions for a symlog axis: 0 and ±{1,3}×10ⁿ spanning the data,
+// returned as {tickvals (in transformed space), ticktext (real values)}.
+function symlogTicks(C, ymin, ymax) {
+  const peak = Math.max(Math.abs(ymin), Math.abs(ymax), C * 10);
+  const startExp = Math.floor(Math.log10(C));
+  const endExp = Math.ceil(Math.log10(peak));
+  const vals = new Set([0]);
+  for (let e = startExp; e <= endExp; e++) {
+    const base = Math.pow(10, e);
+    for (const m of [base, 3 * base]) {
+      if (m < C * 0.999) continue;
+      if (ymax >= m) vals.add(m);
+      if (ymin <= -m) vals.add(-m);
+    }
+  }
+  const uniq = Array.from(vals).sort((a, b) => a - b);
+  return {
+    tickvals: uniq.map((v) => symlogFwd(v, C)),
+    ticktext: uniq.map((v) => (v === 0 ? "0" : fmtNum(v))),
+  };
+}
+
+function reSrcTag(src) {
+  // [ISSUE-<src>] — escape regex metacharacters in the source name.
+  const esc = src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp("\\[ISSUE-" + esc + "\\]", "g");
+}
+function commentHasTag(text, src) { return reSrcTag(src).test(text); }
+
+function renderSourceButtons(order) {
+  const row = $("tag-row");
+  // Wipe everything except the leading label.
+  while (row.children.length > 1) row.removeChild(row.lastChild);
+  // Reset the Cmd+]/[ cycle index so the first press on a new pair starts at
+  // the first source.
+  STATE.sourceCycleIdx = -1;
+  const ta = $("comment");
+  const text = ta.value;
+  // No privileged source -- sources sorted alphabetically.
+  const buttons = [...order].sort();
+  for (const src of buttons) {
+    const btn = document.createElement("button");
+    btn.className = "src-btn";
+    btn.dataset.src = src;
+    btn.textContent = src;
+    if (commentHasTag(text, src)) btn.classList.add("on");
+    btn.title = `flag this issue as being in ${src}`;
+    btn.onclick = () => toggleSource(src);
+    row.appendChild(btn);
+  }
+}
+
+function toggleSource(src) {
+  const ta = $("comment");
+  let text = ta.value;
+  const had = commentHasTag(text, src);
+  if (had) {
+    // Remove all instances of this tag + any spacing around them
+    text = text.replace(new RegExp("\\s*\\[ISSUE-" + src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\]\\s*", "g"), " ").trim();
+  } else {
+    // Insert at the front, separated by a space if non-empty. No
+    // auto-tagging of any other source -- the user picks exactly which
+    // source(s) the issue is in.
+    text = `[ISSUE-${src}]` + (text.trim() ? " " + text.trimStart() : "");
+  }
+  ta.value = text;
+  // Refresh button visuals
+  for (const b of $("tag-row").querySelectorAll(".src-btn")) {
+    b.classList.toggle("on", commentHasTag(text, b.dataset.src));
+  }
+  STATE.unsavedDirty = true;
+  setSaveStatus("unsaved…");
+  ta.focus();
+}
+
+function renderRatioPanel(sources, order) {
+  // Ratio panel is now anchored on GMD (the spliced canonical output)
+  // instead of Mitchell. For each raw source S, we report median(GMD/S)
+  // and the YoY correlation between GMD and S.
+  const anchor = "GMD";
+  const m = sources[anchor] || [];
+  const mMap = {};
+  for (const [y, v] of m) mMap[y] = v;
+  const panel = $("ratio-panel");
+  panel.innerHTML = "";
+  if (m.length === 0) {
+    panel.innerHTML = `<span class="pill" style="background:#fafafa">no GMD anchor for this pair</span>`;
+    return;
+  }
+  const peerOrder = order.filter((s) => s !== anchor);
+  if (peerOrder.length === 0) {
+    panel.innerHTML = `<span class="pill" style="background:#fafafa">no other sources</span>`;
+    return;
+  }
+  for (const src of peerOrder) {
+    const series = sources[src] || [];
+    // Median level ratio (anchor / source), positive overlap only
+    const ratios = [];
+    for (const [y, v] of series) {
+      const mv = mMap[y];
+      if (mv == null || v == null || v === 0 || mv === 0) continue;
+      if (mv * v <= 0) continue;
+      ratios.push(mv / v);
+    }
+    // YoY correlation between anchor and this source
+    const corr = yoyCorrelation(m, series);
+
+    if (ratios.length < 3 && (corr.rho == null)) continue; // not enough overlap
+
+    // Ratio flag: clean ×10ⁿ for |n|≥1 = bad; > 0.5 log10 off = warn
+    let med = null, lr = null, nearestPow = null, distToPow = null;
+    let ratioBad = false, ratioWarn = false;
+    if (ratios.length >= 3) {
+      ratios.sort((a, b) => a - b);
+      med = ratios[Math.floor(ratios.length / 2)];
+      lr = Math.log10(Math.abs(med));
+      nearestPow = Math.round(lr);
+      distToPow = Math.abs(lr - nearestPow);
+      if (Math.abs(nearestPow) >= 1 && distToPow < 0.2) ratioBad = true;
+      else if (Math.abs(lr) >= 0.5) ratioWarn = true;
+    }
+    // Correlation flag: < 0.3 → bad; 0.3 – 0.6 → warn (low correlation in YoY
+    // means series don't move together — possible methodology mismatch).
+    let corrBad = false, corrWarn = false;
+    if (corr.rho != null && corr.n >= 5) {
+      if (corr.rho < 0.3) corrBad = true;
+      else if (corr.rho < 0.6) corrWarn = true;
+    }
+    let cls = "pill";
+    if (ratioBad || corrBad) cls += " bad";
+    else if (ratioWarn || corrWarn) cls += " warn";
+
+    // Build inner HTML — two metrics side by side
+    const ratioStr = (med != null)
+      ? `r=<b>${fmtRatio(med)}</b>`
+      : `<span style="opacity:.5">r=–</span>`;
+    const corrStr = (corr.rho != null)
+      ? `ρ=<b>${corr.rho.toFixed(2)}</b>`
+      : `<span style="opacity:.5">ρ=–</span>`;
+    const nStr = `n=${Math.max(ratios.length, corr.n || 0)}`;
+    const tooltip = [
+      `median GMD/${src} = ${med != null ? fmtRatio(med) : 'n/a'}`,
+      `YoY Pearson ρ = ${corr.rho != null ? corr.rho.toFixed(3) : 'n/a'}`,
+      `${ratios.length} level-overlap years, ${corr.n || 0} YoY-overlap years`,
+      "click the source in the chart legend to hide/show",
+    ].join(" · ");
+    if (currentHiddenSet().has(src)) cls += " off";
+    panel.innerHTML +=
+      `<span class="${cls}" title="${tooltip}">` +
+      `${src}: ${ratioStr} ${corrStr}` +
+      `</span>`;
+  }
+  if (!panel.innerHTML) {
+    panel.innerHTML = `<span class="pill" style="background:#fafafa">no peer overlap with GMD</span>`;
+  }
+  // No checkbox wiring or extra Mitchell pill: source visibility is toggled
+  // via Plotly's own legend (single source of truth = no duplicate legend).
+}
+
+async function showHistory() {
+  if (!STATE.data) return;
+  const p = STATE.data.pairs[STATE.currentIdx];
+  if (!p) return;
+  const key = pairKey(p);
+  const panel = $("history-panel");
+  // Toggle off if already open for the same key
+  if (panel.style.display !== "none" && panel.dataset.key === key) {
+    panel.style.display = "none";
+    return;
+  }
+  panel.style.display = "block";
+  panel.innerHTML = "<i style=\"color:var(--muted)\">loading…</i>";
+  panel.dataset.key = key;
+  try {
+    const r = await fetch(`history?key=${encodeURIComponent(key)}`, { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    const entries = data.entries || [];
+    if (!entries.length) {
+      panel.innerHTML = `<i style="color:var(--muted)">no save history for ${escapeHtml(key)} yet.</i>`;
+      return;
+    }
+    let html = `<div style="margin-bottom:6px;color:var(--muted)">${entries.length} saved version${entries.length === 1 ? "" : "s"} of <code>${escapeHtml(key)}</code> (newest last). Click <b>load</b> to put any version back into the comment box (it doesn't save until you Approve & Next or hit Cmd+Enter).</div>`;
+    entries.forEach((e, i) => {
+      const ts = e.ts || "?";
+      const approved = !!e.approved;
+      const body = (e.comment || "").trim() || "(empty)";
+      html += `<div class="history-entry">` +
+              `<span class="ts">${escapeHtml(ts)}</span>` +
+              `<span class="ap ${approved ? "yes" : "no"}">${approved ? "✓" : "—"}</span>` +
+              `<span class="body">${escapeHtml(body)}</span>` +
+              `<button data-idx="${i}">load</button>` +
+              `</div>`;
+    });
+    panel.innerHTML = html;
+    panel.querySelectorAll("button[data-idx]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const e = entries[parseInt(b.dataset.idx, 10)];
+        $("comment").value = e.comment || "";
+        // Sync source buttons to the restored text
+        for (const sb of $("tag-row").querySelectorAll(".src-btn")) {
+          sb.classList.toggle("on", commentHasTag(e.comment || "", sb.dataset.src));
+        }
+        STATE.unsavedDirty = true;
+        setSaveStatus("loaded prior version — unsaved until you approve");
+        $("comment").focus();
+      });
+    });
+  } catch (err) {
+    panel.innerHTML = `<span style="color:#dc2626">history load failed: ${escapeHtml(err.message)}</span>`;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function fmtRatio(r) {
+  // Compact, human-readable formatting for the cross-source ratio pills.
+  // Ratios that round to zero in 3 decimals are shown as "≈0" — the actual
+  // exponent doesn't matter (it just means "Mitchell is way smaller than the
+  // peer"), so 9.75e-13 should read as "≈0", not as a noisy exponent.
+  if (r == null || Number.isNaN(r)) return "–";
+  if (r === 0) return "0";
+  const a = Math.abs(r);
+  if (a < 0.001) return "≈0";                           // effectively zero
+  if (a < 0.01) return r.toFixed(3);                    // 0.001 – 0.01
+  if (a < 1)    return r.toFixed(2);                    // 0.01 – 1
+  if (a < 10)   return r.toFixed(2);                    // 1 – 10
+  if (a < 100)  return r.toFixed(1);                    // 10 – 100
+  if (a < 1000) return r.toFixed(0);                    // 100 – 1000
+  if (a < 1e6) {                                        // 1k – 1M
+    const k = r / 1e3;
+    return (Math.abs(k) < 10 ? k.toFixed(1) : k.toFixed(0)) + "k";
+  }
+  if (a < 1e9) {                                        // 1M – 1B
+    const m = r / 1e6;
+    return (Math.abs(m) < 10 ? m.toFixed(1) : m.toFixed(0)) + "M";
+  }
+  return r.toExponential(1);                            // fallback: very large
+}
+
+// Reason-type taxonomy used by the filter chips and sidebar badges.
+// 'kind' string format = "<group>:<short>" so renderFlags + applyFilter can
+// match either flavour.
+const REASON_INFO = {
+  // Per-source checks — flag anomalous values within a single source's series
+  "outlier":          { group: "Per-source", label: "Distribution-tail outlier", help: "GMD value (for indices/levels, its year-on-year growth) lands in the extreme 0.5% / 99.5% tail of this variable's distribution pooled across all countries and years; unemployment is also flagged outside 0–60%." },
+  "corr":             { group: "Per-source", label: "Source uncorrelated w/ GMD", help: "A raw source's per-country time series correlates < 0.3 with the final spliced GMD series (threshold 0 for pop and unemp)." },
+  "discrep":          { group: "Per-source", label: "Source level far from GMD", help: "In some year a raw source's level is more than 5× GMD, or below one-tenth of it." },
+  "implaus":          { group: "Per-source", label: "Implausible ratio value",  help: "Ratio outside sane bounds: share-of-GDP ratios above 300% or below 0.1%; deficit/current-account ratios beyond ±50% of GDP." },
+  "lvl10":            { group: "Per-source", label: "Power-of-10 scale error",  help: "≥2 peer sources agree this source is off by a clean ×10ⁿ factor — a decimal-place / units bug." },
+  "break":            { group: "Per-source", label: "Within-source 10× jump",   help: "A year-on-year jump above 10× (or below 0.1×) inside one source — often a missed currency redenomination." },
+  "spike":            { group: "Per-source", label: "Single-year spike",        help: "Single-year value off >4× vs the ±2y smooth window (heuristic)." },
+  "yoy":              { group: "Per-source", label: "Repeated YoY jumps",       help: "≥1 within-source year-on-year jump above 5× or below 0.2× (heuristic)." },
+  // Cross-variable identity checks
+  "govdef":           { group: "Identity",   label: "Deficit identity",   help: "Deficit ≠ revenue − expenditure" },
+  "cgovlargergengov": { group: "Identity",   label: "Gen < central gov",  help: "General government smaller than central government (impossible)" },
+  "GDPaccounting":    { group: "Identity",   label: "GDP components",     help: "C+I+G+NX inconsistent with nominal GDP" },
+  "GDPcompcorr":      { group: "Identity",   label: "GDP comovement",     help: "GDP component growth weakly correlated with nGDP" },
+  "inflCPIdiscrp":    { group: "Identity",   label: "CPI vs infl",        help: "Country correlation CPI growth vs infl < 0.3" },
+  "Mordering":        { group: "Identity",   label: "M-aggregate order",  help: "M0 ≤ M1 ≤ M2 ordering violated" },
+  "realrate":         { group: "Identity",   label: "Real rate band",     help: "strate − infl outside [-50, 50] percentage points" },
+  // Process checks
+  "share":            { group: "Process",    label: "World GDP share",    help: "Country share of world nGDP_USD off Wikipedia by >4× (>10× pre-1995)" },
+};
+const GROUP_ORDER = ["Per-source", "Identity", "Process"];
+
+// Likely remedy per check, so a drafted issue tells the fixer what to DO, not
+// just which check tripped. Keyed by reason short-name (see RSHORT for the
+// long->short ledger mapping). Used by issueForFinding().
+const FIX_HINT = {
+  "outlier":          "Confirm the extreme value against the source; if it's a typo/units error, correct or drop it.",
+  "corr":             "Source series diverges in shape from GMD — verify it's the right series/definition (or a splice seam).",
+  "discrep":          "Reconcile the source's level against GMD and peers; usually a units or base-year mismatch.",
+  "implaus":          "Value is outside a sane range — almost always a units/scale error; check the conversion.",
+  "lvl10":            "Rescale this source by the indicated power of 10 (decimal-place / units bug).",
+  "break":            "Inspect the break year for a missed currency redenomination or a splice seam.",
+  "spike":            "Single-year spike — verify against the source; likely a transcription error.",
+  "yoy":              "Repeated implausible year-on-year jumps — check units consistency across the series.",
+  "Mordering":        "Monetary aggregates out of order — re-check the M0/M1/M2 definitions and mapping.",
+  "realrate":         "Implausible real rate — verify the nominal-rate and inflation series align in time/units.",
+  "govdef":           "Deficit ≠ revenue − expenditure — reconcile the three series (or the gov level: central vs general).",
+  "cgovlargergengov": "General < central government — likely a cgov/gen_gov prefix swap on one series.",
+  "GDPaccounting":    "C+I+G+NX doesn't reconcile with nominal GDP — check component coverage/units.",
+  "GDPcompcorr":      "GDP component barely comoves with nGDP — verify the component series/definition.",
+  "inflCPIdiscrp":    "CPI growth and reported inflation disagree — check which is the source of truth.",
+  "share":            "Country's world-GDP share is implausible — usually a USDfx or nGDP units error.",
+};
+
+// `dqr_excluded_flag_types` -- the set of reason short-names whose
+// checkboxes are UNCHECKED in the reason-filter menu. Stored as exclusion
+// rather than inclusion so the default ("all selected") never persists
+// any data; clearing localStorage = default behavior.
+function getExcludedReasons() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem("dqr_excluded_flag_types") || "[]"));
+  } catch (_) { return new Set(); }
+}
+function setExcludedReasons(set) {
+  try { localStorage.setItem("dqr_excluded_flag_types", JSON.stringify([...set])); } catch (_) {}
+}
+
+function presentReasons() {
+  const present = new Set();
+  for (const p of (STATE.data?.pairs || [])) {
+    for (const f of pairAllFlags(p)) {
+      present.add(f.kind.split(":").pop());
+    }
+  }
+  return present;
+}
+
+function updateReasonFilterButton() {
+  const present = presentReasons();
+  const excluded = getExcludedReasons();
+  // Only count exclusions that are actually present in this dataset.
+  const excludedHere = [...excluded].filter((r) => present.has(r)).length;
+  const total = present.size;
+  const btn = $("reason-filter-btn");
+  if (!btn) return;
+  if (excludedHere === 0) {
+    btn.textContent = "Error types: All ▾";
+  } else if (excludedHere === total) {
+    btn.textContent = "Error types: None ▾";
+  } else {
+    btn.textContent = `Error types: ${total - excludedHere}/${total} ▾`;
+  }
+}
+
+function renderReasonFilter() {
+  const list = $("reason-filter-list");
+  if (!list) return;
+  const present = presentReasons();
+  const excluded = getExcludedReasons();
+  list.innerHTML = "";
+  for (const group of GROUP_ORDER) {
+    const reasons = [...present].filter((r) => REASON_INFO[r]?.group === group).sort();
+    if (!reasons.length) continue;
+    const lbl = document.createElement("div");
+    lbl.className = "group-label";
+    lbl.textContent = group;
+    list.appendChild(lbl);
+    for (const short of reasons) {
+      const info = REASON_INFO[short];
+      const label = document.createElement("label");
+      label.title = info.help;
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = !excluded.has(short);
+      cb.dataset.flag = short;
+      cb.addEventListener("change", () => {
+        const ex = getExcludedReasons();
+        if (cb.checked) ex.delete(short);
+        else ex.add(short);
+        setExcludedReasons(ex);
+        updateReasonFilterButton();
+        renderSidebar();
+      });
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(" " + info.label));
+      list.appendChild(label);
+    }
+  }
+  updateReasonFilterButton();
+}
+
+function activeReasonSet() {
+  // The "active" reason set is the COMPLEMENT of the excluded set, intersected
+  // with the reasons actually present. If nothing is excluded (default),
+  // returns null to signal "no reason filter".
+  const present = presentReasons();
+  const excluded = getExcludedReasons();
+  const excludedHere = [...excluded].filter((r) => present.has(r));
+  if (excludedHere.length === 0) return null;
+  const active = new Set([...present].filter((r) => !excluded.has(r)));
+  return active;
+}
+
+function pairAllFlags(p) {
+  // Collect every flag attached to a pair, regardless of shape:
+  //   - p.heuristic_flags  -- per-source dict { src: [{t,y,lr|p|n}, ...] }
+  //   - p.engine_flags     -- flat list [{y, src, r:[short_reason,...]}, ...]
+  //   - p.flags            -- legacy flat list (kept for old data.json shape)
+  // Returns one normalized array of {kind, src, label, year} for display
+  // and filtering.
+  const out = [];
+  if (p.heuristic_flags && typeof p.heuristic_flags === "object") {
+    for (const [src, list] of Object.entries(p.heuristic_flags)) {
+      for (const f of (list || [])) {
+        out.push({ kind: "heur:" + f.t, src, year: f.y || null, raw: f });
+      }
+    }
+  } else if (Array.isArray(p.flags)) {
+    for (const f of p.flags) {
+      out.push({ kind: "heur:" + f.t, src: "Mitchell", year: f.y || null, raw: f });
+    }
+  }
+  if (Array.isArray(p.engine_flags)) {
+    for (const ef of p.engine_flags) {
+      for (const r of (ef.r || [])) {
+        out.push({ kind: "engine:" + r, src: ef.src || "", year: ef.y || null });
+      }
+    }
+  }
+  return out;
+}
+
+function renderFlags(p) {
+  const el = $("flags-line");
+  const all = pairAllFlags(p);
+  if (!all.length) {
+    el.style.display = "none";
+    el.innerHTML = "";
+    return;
+  }
+  // Group by (kind, src) so we don't render 50 separate "outlier (Mitchell)"
+  // badges -- one badge per (kind, src) with a count when >1.
+  const groups = new Map();
+  for (const f of all) {
+    const k = f.kind + "|" + f.src;
+    if (!groups.has(k)) groups.set(k, { ...f, count: 0, years: [] });
+    const g = groups.get(k);
+    g.count++;
+    if (f.year != null) g.years.push(f.year);
+  }
+  const parts = [];
+  for (const g of [...groups.values()].sort((a, b) => b.count - a.count)) {
+    const [kindGroup, kindName] = g.kind.split(":");
+    const srcLabel = g.src ? ` <span class="src-tag">${escapeHtml(g.src)}</span>` : "";
+    const countLabel = g.count > 1 ? ` ×${g.count}` : "";
+    let body;
+    if (kindGroup === "heur") {
+      if (kindName === "spike") {
+        const f = g.raw;
+        body = `<b>spike</b> ${f.y} (${f.lr > 0 ? "+" : ""}${f.lr} log10 vs window)`;
+      } else if (kindName === "lvl10") {
+        const f = g.raw;
+        const sign = f.p > 0 ? "×10" + supDigits(f.p) : "÷10" + supDigits(-f.p);
+        body = `<b>${sign} vs ${f.n} peers</b>`;
+      } else if (kindName === "yoy") {
+        const f = g.raw;
+        body = `<b>${f.n} large YoY jump${f.n > 1 ? "s" : ""}</b>`;
+      } else {
+        body = `<b>${kindName}</b>`;
+      }
+    } else {
+      // Engine reason; surface the short name (outlier, lvl10, break, ...)
+      body = `<b>${kindName}</b>${countLabel}`;
+    }
+    parts.push(`<span class="flag">⚑ ${body}${srcLabel}</span>`);
+  }
+  el.innerHTML = parts.join("");
+  el.style.display = "block";
+}
+
+function supDigits(n) {
+  const map = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵",
+                "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return String(n).split("").map((c) => map[c] || c).join("");
+}
+
+function currentSaveKey() {
+  const p = STATE.data?.pairs?.[STATE.currentIdx];
+  return p ? pairKey(p) : null;
+}
+
+async function refreshVettingStatus(p) {
+  const el = $("vetting-status");
+  const banner = $("prior-vetting");
+  if (!el || !p) return;
+  el.textContent = "";
+  if (banner) { banner.style.display = "none"; banner.innerHTML = ""; }
+  try {
+    const r = await fetch(`vettings?iso3=${encodeURIComponent(p.iso3)}&variable=${encodeURIComponent(p.var)}`);
+    if (!r.ok) return;
+    const body = await r.json();
+    // Stale-request guard: the user may have navigated to another pair while
+    // this fetch was in flight. Don't paint pair A's banner onto pair B.
+    if (STATE.data?.pairs?.[STATE.currentIdx] !== p) return;
+    const vettings = body.vettings || [];
+    const n = vettings.length;
+    if (!n) { el.textContent = "no ledger vettings yet"; return; }
+    const status = vettings.reduce((acc, v) => {
+      acc[v.status] = (acc[v.status] || 0) + 1;
+      return acc;
+    }, {});
+    const parts = Object.entries(status).map(([k, v]) => `${v} ${k}`);
+    el.textContent = `${n} ledger vetting${n === 1 ? "" : "s"} (${parts.join(", ")})`;
+
+    // Detect re-surfaced flags: a vetting whose value was recorded yet whose
+    // cell is STILL flagged means flags.py declined to suppress it because the
+    // value changed since approval (a matching value would have been
+    // suppressed and wouldn't appear here). No client-side value math needed —
+    // presence in engine_flags IS the signal. Map ledger reason_type (long) to
+    // the short names data.json uses.
+    const RSHORT = { cgovlargergengov: "cgovlrgr", inflCPIdiscrp: "inflCPI",
+                     GDPaccounting: "GDPacct", GDPcompcorr: "GDPcomp" };
+    const efs = (p.engine_flags) || [];
+    const shownReasons = (yr, src) => {
+      // A null/absent ledger source matches every source, so union the reasons
+      // shown across all sources at that year; otherwise match the exact source.
+      if (src == null) return efs.filter((e) => e.y === yr).flatMap((e) => e.r);
+      const hit = efs.find((e) => e.y === yr && (e.src || "") === src);
+      return hit ? hit.r : [];
+    };
+    const resurfaced = vettings.filter((v) => {
+      if (v.value == null || v.year == null) return false;  // only value-keyed, year-specific
+      const reasons = shownReasons(v.year, v.source);
+      if (!reasons.length) return false;
+      return v.reason_type === "all" || reasons.includes(RSHORT[v.reason_type] || v.reason_type);
+    }).sort((a, b) => a.year - b.year);
+
+    // Inline "previously vetted" banner: surface the most recent record's
+    // justification + reviewer + date so a re-flagged pair shows the prior
+    // reasoning without digging through the markdown log. "Re-use" drops
+    // that justification back into the comment box for a quick re-approve.
+    if (banner) {
+      let changedHtml = "";
+      if (resurfaced.length) {
+        const ex = resurfaced.slice(0, 4).map((v) =>
+          `${v.year} (was ${Number(v.value).toLocaleString(undefined, { maximumFractionDigits: 2 })})`
+        ).join(", ");
+        changedHtml =
+          `<div style="font-weight:600;color:#92400e;background:#fffbeb;` +
+          `border-left:3px solid var(--warn);padding:4px 8px;margin-bottom:6px;border-radius:3px">` +
+          `↻ ${resurfaced.length} previously-vetted cell${resurfaced.length === 1 ? "" : "s"} ` +
+          `re-surfaced — the value changed since you approved it: ${escapeHtml(ex)}` +
+          `${resurfaced.length > 4 ? ", …" : ""}</div>`;
+      }
+      const withText = vettings
+        .filter((v) => (v.justification || "").trim()
+                       && !/^\(blank-approval|^\(commented-only|^\(reviewed via/.test(v.justification))
+        .sort((a, b) => (b.approved_at || "").localeCompare(a.approved_at || ""));
+      let priorHtml = "";
+      let just = "";
+      if (withText.length) {
+        const v = withText[0];
+        just = (v.justification || "").trim();
+        // Skip the blue prior-vetting banner when its text just echoes the
+        // comment already shown in the box (and the yellow "previously
+        // commented" banner) -- it's pure duplication. Keep it only when it
+        // adds something, e.g. a fresh checkout where comments.json is empty
+        // but the committed ledger still has the prior justification.
+        const curComment = ($("comment").value || "").trim();
+        if (just && just !== curComment) {
+          const when = (v.approved_at || "").slice(0, 10);
+          const who = v.approved_by && v.approved_by !== "dashboard" ? ` by ${v.approved_by}` : "";
+          priorHtml =
+            `<div style="font-weight:600;color:#1d4ed8">Previously ${escapeHtml(v.status)}` +
+            `${when ? ` <span style="font-weight:400;color:var(--muted)">${when}${escapeHtml(who)}</span>` : ""}</div>` +
+            `<div style="margin:2px 0">${escapeHtml(just)}</div>` +
+            `<button type="button" id="reuse-vetting" style="font-size:10px;padding:1px 6px">re-use this comment</button>`;
+        }
+      }
+      if (changedHtml || priorHtml) {
+        banner.innerHTML = changedHtml + priorHtml;
+        banner.style.display = "block";
+        const btn = banner.querySelector("#reuse-vetting");
+        if (btn) btn.addEventListener("click", () => {
+          $("comment").value = just;
+          STATE.unsavedDirty = true;
+          setSaveStatus("re-used prior comment — Approve to save");
+          $("comment").focus();
+        });
+      }
+    }
+  } catch (_) { /* server down or ledger missing -- harmless */ }
+}
+
+function loadCurrentComment() {
+  const p = STATE.data.pairs[STATE.currentIdx];
+  if (!p) return;
+  const c = STATE.comments[pairKey(p)] || {};
+  $("comment").value = c.comment || "";
+  STATE.unsavedDirty = false;
+  setSaveStatus(c.ts ? "saved " + new Date(c.ts).toLocaleString() : "no comment yet");
+  // Collapse the history panel from the previous pair (it's pair-specific).
+  $("history-panel").style.display = "none";
+  $("history-panel").innerHTML = "";
+  $("history-panel").dataset.key = "";
+  // Show the history button only when this pair has actually been saved before
+  // (an approval or non-empty comment with a timestamp). No prior save → no
+  // history to view, so hide the button entirely.
+  const hasHistory = !!(c.ts && (c.approved || c.status === "known-limitation" || (c.comment || "").trim()));
+  $("history-toggle").style.display = hasHistory ? "" : "none";
+  // Re-render source-issue buttons for whichever sources this pair has.
+  // These buttons (above the textarea) already let the user tag which
+  // sources the comment applies to via [ISSUE-<source>] markers.
+  const sources = STATE.data.data[pairKey(p)] || {};
+  renderSourceButtons(Object.keys(sources));
+  // Async refresh of the vetting-status indicator (count of active ledger entries).
+  refreshVettingStatus(p);
+  // "Previously you said…" banner — only shown when the pair has prior state.
+  const prev = $("prev-comment");
+  if (c.ts && (c.approved || c.status === "known-limitation" || (c.comment || "").trim())) {
+    const dt = new Date(c.ts);
+    const stamp = isFinite(dt) ? dt.toLocaleString() : c.ts;
+    const head = c.status === "known-limitation"
+      ? `~ previously marked known-limitation <span class="ts">${stamp}</span>`
+      : c.approved
+      ? `✓ previously approved <span class="ts">${stamp}</span>`
+      : `⚠ previously commented <span class="ts">${stamp}</span>`;
+    const body = (c.comment || "").trim();
+    prev.className = "prev-comment" + (c.approved ? "" : " no-approve");
+    prev.innerHTML = head + (body ? `<span class="text">${escapeHtml(body)}</span>` : "");
+    prev.style.display = "block";
+  } else {
+    prev.style.display = "none";
+    prev.innerHTML = "";
+  }
+  // Auto-focus the textarea so dictation goes straight in. Cursor at end so
+  // appending dictation doesn't stomp existing text. Skipping focus when the
+  // user is already interacting with another control (avoids stealing focus
+  // mid-click) — only steal when nothing has user attention.
+  setTimeout(() => {
+    const ta = $("comment");
+    const active = document.activeElement;
+    const stealable = !active || active === document.body || active.classList.contains("pair") || active.id === "comment";
+    if (stealable) {
+      ta.focus();
+      // place cursor at end (so dictation appends instead of inserting)
+      const end = ta.value.length;
+      ta.setSelectionRange(end, end);
+    }
+  }, 0);
+}
+
+async function saveCurrent({ approved, status } = {}) {
+  if (!STATE.data) return;
+  const p = STATE.data.pairs[STATE.currentIdx];
+  if (!p) return;
+  // Default save key is pair-level (ISO3_VAR). If the user picked a specific
+  // source in the scope dropdown, we append _<source> so the server's fan-out
+  // restricts the ledger inserts to that source.
+  const key = currentSaveKey();
+  const comment = $("comment").value;
+  const existing = STATE.comments[key] || {};
+  const explicitApprove = approved !== undefined;
+  const explicitStatus = status !== undefined;
+  const isDecision = explicitApprove || explicitStatus;
+  const commentChanged = (existing.comment || "") !== comment;
+  // No-op guard: don't write empty/unchanged records to disk just because
+  // the user navigated past this pair. Only persist when (a) the user hit
+  // Approve explicitly, or (b) the comment text actually changed.
+  if (!isDecision && !commentChanged) {
+    STATE.unsavedDirty = false;
+    return;
+  }
+  const willApprove = explicitApprove ? !!approved : (existing.approved || false);
+  // Disposition for the ledger: explicit if given, else derived from approve.
+  const willStatus = explicitStatus ? status
+    : (explicitApprove ? (approved ? "vetted-correct" : "pending-fix") : existing.status);
+  // Clobber guard: warn before silently replacing a non-empty saved comment
+  // with an empty one. Strips [ISSUE-*] tags so toggling tags doesn't trigger
+  // false alarms (the ISSUE tag set is part of the structured state, the
+  // narrative comment text is what we want to protect).
+  const stripTags = (s) => (s || "").replace(/\[ISSUE-[\w\-]+\]/g, "").trim();
+  const oldBody = stripTags(existing.comment);
+  const newBody = stripTags(comment);
+  if (oldBody && !newBody && (existing.approved || willApprove)) {
+    const ok = confirm(
+      `You're about to clear a previously-saved comment on ${key}:\n\n` +
+      `  "${oldBody.slice(0, 200)}${oldBody.length > 200 ? "…" : ""}"\n\n` +
+      `Saving now will replace it with empty text. Continue?`
+    );
+    if (!ok) {
+      // Restore the textarea so the user keeps the prior text.
+      $("comment").value = existing.comment || "";
+      STATE.unsavedDirty = false;
+      // Refresh the source-button states to match the restored text
+      for (const b of $("tag-row").querySelectorAll(".src-btn")) {
+        b.classList.toggle("on", commentHasTag(existing.comment || "", b.dataset.src));
+      }
+      setSaveStatus("clobber cancelled — kept previous comment", "ok");
+      return;
+    }
+  }
+  // Optimistic local update
+  STATE.comments[key] = { ...existing, comment, approved: willApprove, ts: new Date().toISOString() };
+  if (willStatus) STATE.comments[key].status = willStatus;
+  STATE.unsavedDirty = false;
+  // backup to localStorage in case the server is down
+  try { localStorage.setItem("dqr_last_" + key, JSON.stringify(STATE.comments[key])); }
+  catch (_) {}
+  setSaveStatus("saving…");
+  try {
+    const body = { key, comment };
+    if (explicitApprove) body.approved = !!approved;
+    if (explicitStatus) body.status = status;
+    const r = await fetch("comment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(`server ${r.status}`);
+    setSaveStatus("saved ✓", "ok");
+    renderSidebar();
+  } catch (e) {
+    setSaveStatus("SAVE FAILED — " + e.message + " (kept locally)", "err");
+  }
+}
+
+function setSaveStatus(text, cls) {
+  const el = $("save-status");
+  el.textContent = text;
+  el.className = "save-status" + (cls ? " " + cls : "");
+}
+
+function goTo(idx, opts = {}) {
+  if (idx == null || idx < 0 || idx >= STATE.data.pairs.length) return;
+  // save current first if dirty
+  if (STATE.unsavedDirty) saveCurrent();
+  // Clear the manual anchor-year input so the auto-pick takes over for the
+  // new pair. The user can still re-enter a year on the new pair.
+  $("anchor-year").value = "";
+  // Every pair opens in "Levels" view. The user can switch to YoY/Rebased for
+  // the pair they're on, but it never carries over to the next one. (State
+  // only -- the renderChartAndTable() below does the single redraw.)
+  $("viewmode").dataset.value = "levels";
+  $("viewmode").querySelectorAll(".view-btn").forEach((b) =>
+    b.classList.toggle("on", b.dataset.view === "levels"));
+  STATE.currentIdx = idx;
+  try { localStorage.setItem("dqr_idx", String(idx)); } catch (_) {}
+  const p = STATE.data.pairs[idx];
+  $("title").textContent = `${p.iso3} — ${p.var}  ·  ${idx + 1}/${STATE.data.pairs.length}`;
+  renderChartAndTable();
+  loadCurrentComment();
+  renderSidebar();
+}
+
+function nextIdx(filtered = false) {
+  if (filtered && STATE.filteredIdx.length) {
+    const cur = STATE.filteredIdx.indexOf(STATE.currentIdx);
+    if (cur >= 0) {
+      // Normal case: current pair is in the filtered list, advance one.
+      return cur < STATE.filteredIdx.length - 1
+        ? STATE.filteredIdx[cur + 1]
+        : STATE.filteredIdx[STATE.filteredIdx.length - 1];
+    }
+    // Current pair was filtered out (e.g. you just approved it while the
+    // "only unreviewed" filter is on). Jump to the first filtered idx > current.
+    for (const idx of STATE.filteredIdx) {
+      if (idx > STATE.currentIdx) return idx;
+    }
+    // No filtered pair after current — wrap to the first filtered one.
+    return STATE.filteredIdx[0];
+  }
+  return Math.min(STATE.currentIdx + 1, STATE.data.pairs.length - 1);
+}
+function prevIdx(filtered = false) {
+  if (filtered && STATE.filteredIdx.length) {
+    const cur = STATE.filteredIdx.indexOf(STATE.currentIdx);
+    if (cur >= 0) {
+      return cur > 0 ? STATE.filteredIdx[cur - 1] : STATE.filteredIdx[0];
+    }
+    // Current pair was filtered out — jump to the last filtered idx < current.
+    for (let i = STATE.filteredIdx.length - 1; i >= 0; i--) {
+      if (STATE.filteredIdx[i] < STATE.currentIdx) return STATE.filteredIdx[i];
+    }
+    return STATE.filteredIdx[STATE.filteredIdx.length - 1];
+  }
+  return Math.max(STATE.currentIdx - 1, 0);
+}
+
+async function next() { await saveCurrent(); goTo(nextIdx(true)); }
+async function prev() { await saveCurrent(); goTo(prevIdx(true)); }
+
+// Undo stack records the idx of pairs the user just decided on (approve
+// or error). Cmd/Ctrl+Z (or the Undo button) pops the top, navigates
+// back there, and surfaces the comment textarea so the decision can be
+// amended. The ledger fan-out is sticky -- re-approving with the edited
+// comment re-fans the new comment onto the same flagged cells.
+function pushUndo(idx) {
+  STATE.undoStack = STATE.undoStack || [];
+  STATE.undoStack.push(idx);
+  // Cap at a sensible depth so the stack doesn't grow unboundedly during
+  // a long review session.
+  if (STATE.undoStack.length > 200) STATE.undoStack.shift();
+  $("undo-btn").disabled = false;
+}
+function popUndo() {
+  if (!STATE.undoStack || !STATE.undoStack.length) return;
+  const idx = STATE.undoStack.pop();
+  if (!STATE.undoStack.length) $("undo-btn").disabled = true;
+  goTo(idx);
+  // Land focus in the textarea so the reviewer can immediately edit.
+  setTimeout(() => $("comment").focus(), 50);
+}
+
+// After an Approve/Error, show the NEXT pair in the sidebar list (by list
+// position, not global index). Rebuilds the filtered+sorted list to reflect
+// the new review status, then:
+//   - if the decided pair is still visible (e.g. "Show all"), advance to the
+//     row right below it;
+//   - if it dropped out of the list (e.g. "Only unreviewed"), the row that
+//     slid up into its old position is the next one.
+function advanceAfterDecision() {
+  const oldPos = STATE.filteredIdx.indexOf(STATE.currentIdx);
+  applyFilter();  // recompute with the just-saved review status
+  const list = STATE.filteredIdx;
+  if (!list.length) { renderSidebar(); return; }
+  const stillThere = list.indexOf(STATE.currentIdx);
+  let nextGlobal;
+  if (stillThere >= 0) {
+    nextGlobal = list[Math.min(stillThere + 1, list.length - 1)];
+  } else if (oldPos >= 0) {
+    nextGlobal = list[Math.min(oldPos, list.length - 1)];
+  } else {
+    nextGlobal = list[0];
+  }
+  goTo(nextGlobal);
+}
+
+async function approveAndNext() {
+  const prevIdx = STATE.currentIdx;
+  await saveCurrent({ approved: true, status: "vetted-correct" });
+  pushUndo(prevIdx);
+  advanceAfterDecision();
+  refreshReviewer(false);  // update the "N reviewed this week" counter
+}
+async function errorAndNext() {
+  const prevIdx = STATE.currentIdx;
+  // 'needs fix' -> status='pending-fix' in the vetting ledger; surfaces in the
+  // Findings tab as an open item to file. After an engine rerun that no longer
+  // flags the pair, no records remain to suppress new flags.
+  await saveCurrent({ approved: false, status: "pending-fix" });
+  pushUndo(prevIdx);
+  advanceAfterDecision();
+  refreshReviewer(false);
+}
+async function limitationAndNext() {
+  const prevIdx = STATE.currentIdx;
+  // 'known-limitation' -> the data is imperfect but accepted as-is (e.g. a
+  // price-only index where we'd prefer total-return). Suppresses the flag like
+  // an approval, but records WHY it's tolerated rather than asserting it's right.
+  await saveCurrent({ approved: false, status: "known-limitation" });
+  pushUndo(prevIdx);
+  advanceAfterDecision();
+  refreshReviewer(false);
+}
+
+function setViewMode(view) {
+  if (!["levels", "yoy", "rebased"].includes(view)) return;
+  $("viewmode").dataset.value = view;
+  $("viewmode").querySelectorAll(".view-btn").forEach((b) =>
+    b.classList.toggle("on", b.dataset.view === view));
+  $("anchor-year").value = "";
+  renderChartAndTable();
+}
+function cycleViewMode() {
+  const order = ["levels", "yoy", "rebased"];
+  const i = order.indexOf($("viewmode").dataset.value);
+  setViewMode(order[(i + 1) % order.length]);
+}
+
+function wireXTickClicks() {
+  const chartEl = $("chart");
+  if (!chartEl) return;
+  const tip = $("xtick-tip");
+  // Plotly redraws .xtick text nodes on every react; iterate fresh.
+  const ticks = chartEl.querySelectorAll(".xaxislayer-above .xtick > text, .xtick > text");
+  ticks.forEach((t) => {
+    if (t.dataset.dqrWired === "1") return;
+    t.dataset.dqrWired = "1";
+    const year = parseInt(t.textContent, 10);
+    if (!Number.isFinite(year)) return;
+    t.addEventListener("mouseenter", (e) => {
+      tip.textContent = `Start the chart and table from ${year}`;
+      tip.style.display = "block";
+      const r = t.getBoundingClientRect();
+      // Centre the tooltip above the tick label; flip below if the tick
+      // is too close to the top of the viewport.
+      const tw = tip.offsetWidth, th = tip.offsetHeight;
+      let x = r.left + r.width / 2 - tw / 2;
+      let y = r.top - th - 6;
+      if (y < 8) y = r.bottom + 6;
+      tip.style.left = Math.max(8, Math.min(window.innerWidth - tw - 8, x)) + "px";
+      tip.style.top = y + "px";
+    });
+    t.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+    t.addEventListener("click", () => {
+      tip.style.display = "none";
+      // Compute the right-hand side of the current axis range (default =
+      // last observation year across all sources).
+      const layout = chartEl.layout || {};
+      const xRange = (layout.xaxis && layout.xaxis.range) || [];
+      const xHi = Number.isFinite(xRange[1]) ? xRange[1] : null;
+      // Fallback: derive from current trace data.
+      let computedHi = xHi;
+      if (computedHi == null) {
+        for (const tr of (chartEl.data || [])) {
+          for (const x of (tr.x || [])) {
+            if (Number.isFinite(x) && (computedHi == null || x > computedHi)) computedHi = x;
+          }
+        }
+      }
+      if (computedHi == null || computedHi <= year) return;
+      // Trigger Plotly's relayout; the existing plotly_relayout handler
+      // will set STATE.tableXRange and re-render the table.
+      Plotly.relayout(chartEl, { "xaxis.range": [year, computedHi], "xaxis.autorange": false });
+    });
+  });
+}
+
+// ---- Reviewer identity ------------------------------------------------------
+function renderReviewer(reviewer, week) {
+  $("reviewer-name").textContent = reviewer ? `Reviewer: ${reviewer}` : "Reviewer: (not set)";
+  $("reviewer-week").textContent = (week != null && reviewer)
+    ? ` · ${week} reviewed this week` : "";
+}
+async function refreshReviewer(promptIfEmpty) {
+  try {
+    const r = await fetch("reviewer");
+    if (!r.ok) return;
+    const body = await r.json();
+    renderReviewer(body.reviewer, body.reviewed_this_week);
+    if (promptIfEmpty && !body.reviewer) promptReviewer(false);
+  } catch (_) { /* server down — harmless */ }
+}
+async function promptReviewer(isChange) {
+  const current = ($("reviewer-name").textContent || "").replace(/^Reviewer:\s*/, "");
+  const handle = window.prompt(
+    isChange ? "Change reviewer handle (name or email):"
+             : "Enter your reviewer handle (name or email). It's recorded on every approval.",
+    current === "(not set)" ? "" : current);
+  if (handle == null) return;  // cancelled
+  try {
+    const r = await fetch("reviewer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewer: handle.trim() }),
+    });
+    if (r.ok) {
+      const body = await r.json();
+      renderReviewer(body.reviewer, body.reviewed_this_week);
+    }
+  } catch (_) {}
+}
+
+function showShortcutsOverlay()  { $("shortcuts-overlay").style.display = "block"; }
+function hideShortcutsOverlay()  { $("shortcuts-overlay").style.display = "none"; }
+function toggleShortcutsOverlay() {
+  const el = $("shortcuts-overlay");
+  el.style.display = (el.style.display === "block") ? "none" : "block";
+}
+
+let syncInflight = false;
+async function syncToRemote() {
+  if (syncInflight) return;
+  syncInflight = true;
+  // Save the in-flight comment first so the markdown picks it up
+  if (STATE.unsavedDirty) await saveCurrent();
+  setSaveStatus("syncing → origin…");
+  $("sync-btn").disabled = true;
+  try {
+    const r = await fetch("sync", { method: "POST" });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.ok) {
+      setSaveStatus(data.message || "synced ✓", "ok");
+      // New code/data was pulled from GitHub -> reload to show it.
+      if (data.code_updated) {
+        setSaveStatus((data.message || "synced") + " — reloading…", "ok");
+        setTimeout(() => location.reload(), 800);
+      }
+    } else {
+      setSaveStatus("SYNC FAILED — " + (data.message || data.error || `HTTP ${r.status}`), "err");
+    }
+  } catch (e) {
+    setSaveStatus("SYNC FAILED — " + e.message, "err");
+  } finally {
+    syncInflight = false;
+    $("sync-btn").disabled = false;
+  }
+}
+
+// ---- Recompute flags --------------------------------------------------------
+// Two background jobs share one server-side slot (only one runs at a time):
+//   regen      — full recompute of flags.parquet over the pipeline outputs
+//                (slow). The button goes amber when its inputs are out of date
+//                (cheap stat-only manifest check).
+//   resuppress — fast path: re-apply your approvals to flags.py's cached raw
+//                flags (no data re-read) + rebuild the list. Use after vetting.
+let jobInflight = false;
+let jobPollTimer = null;
+
+function paintJobButtons(st) {
+  const job = st.job || {};
+  const running = jobInflight || job.status === "running";
+  const regen = $("regen-btn"), apply = $("apply-btn");
+  if (running) {
+    const resup = job.kind === "resuppress";
+    if (regen) {
+      regen.disabled = true; regen.classList.remove("stale");
+      regen.textContent = resup ? "⟳ regenerate flags" : "⟳ regenerating…";
+    }
+    if (apply) {
+      apply.disabled = true;
+      apply.textContent = resup ? "⟳ applying…" : "apply approvals";
+    }
+    const active = resup ? apply : regen;
+    if (active) active.title = "running" + (job.step ? ` (${job.step})` : "");
+    return;
+  }
+  if (regen) {
+    regen.disabled = false;
+    if (st.stale) {
+      regen.classList.add("stale");
+      regen.textContent = "⟳ regenerate flags (out of date)";
+      const which = (st.changed || []).slice(0, 8).join(", ");
+      regen.title = "Inputs changed since flags were last computed: " + (which || "—")
+                  + ((st.changed || []).length > 8 ? ", …" : "");
+    } else {
+      regen.classList.remove("stale");
+      regen.textContent = st.manifest ? "✓ flags up to date" : "⟳ regenerate flags";
+      regen.title = st.manifest
+        ? "flags.parquet matches its inputs" + (st.generated_at ? ` (computed ${st.generated_at})` : "")
+        : "Recompute the flag engine over the latest pipeline outputs";
+    }
+  }
+  if (apply) {
+    apply.disabled = false;
+    apply.textContent = "apply approvals";
+    apply.title = "Fast: re-apply your approvals to the cached flags and refresh "
+                + "the list (seconds, no full recompute). Use after approving/marking flags.";
+  }
+}
+
+async function refreshRegenStatus() {
+  try {
+    const r = await fetch("regen/status");
+    const st = await r.json().catch(() => ({}));
+    paintJobButtons(st);
+    return st;
+  } catch (e) { return {}; }
+}
+
+async function runRecompute(endpoint, kind) {
+  if (jobInflight) return;
+  jobInflight = true;
+  if (STATE.unsavedDirty) await saveCurrent();
+  const slow = kind === "regen";
+  setSaveStatus(slow ? "regenerating flags — this can take a few minutes…"
+                     : "applying approvals — about a minute…");
+  paintJobButtons({ job: { status: "running", kind } });
+  try {
+    const r = await fetch(endpoint, { method: "POST" });
+    if (r.status === 409) { setSaveStatus("a recompute is already running…", "warn"); }
+    else if (!r.ok && r.status !== 202) {
+      const d = await r.json().catch(() => ({}));
+      setSaveStatus("FAILED — " + (d.error || `HTTP ${r.status}`), "err");
+      jobInflight = false; refreshRegenStatus(); return;
+    }
+    await new Promise((resolve) => {
+      if (jobPollTimer) clearInterval(jobPollTimer);
+      jobPollTimer = setInterval(async () => {
+        const st = await refreshRegenStatus();
+        const job = st.job || {};
+        if (job.status === "done") {
+          clearInterval(jobPollTimer); jobPollTimer = null;
+          setSaveStatus((slow ? "flags regenerated ✓" : "approvals applied ✓") + " — reloading…", "ok");
+          setTimeout(() => location.reload(), 700);
+          resolve();
+        } else if (job.status === "error") {
+          clearInterval(jobPollTimer); jobPollTimer = null;
+          setSaveStatus("FAILED — " + (job.error || "see server log"), "err");
+          resolve();
+        }
+      }, 2000);
+    });
+  } catch (e) {
+    setSaveStatus("FAILED — " + e.message, "err");
+  } finally {
+    jobInflight = false;
+    refreshRegenStatus();   // repaint buttons out of the "running" state (esp. on error)
+  }
+}
+
+const regenFlags = () => runRecompute("regen", "regen");
+const applyApprovals = () => runRecompute("resuppress", "resuppress");
+
+// Jump to the next pair with no decision yet (statusOf === "none"), scanning
+// forward from the current position and wrapping once. Works regardless of the
+// active sidebar filter, so the reviewer can blow through untouched pairs.
+function jumpToNextUnreviewed() {
+  if (!STATE.data) return;
+  const n = STATE.data.pairs.length;
+  for (let off = 1; off <= n; off++) {
+    const i = (STATE.currentIdx + off) % n;
+    if (statusOf(pairKey(STATE.data.pairs[i])) === "none") { goTo(i); return; }
+  }
+  setSaveStatus("no unreviewed pairs left ✓", "ok");
+}
+
+// ---- Findings tab -----------------------------------------------------------
+// Browse the errors the reviewer confirmed (open pending-fix items), grouped by
+// likely source, and hand each one off to a pre-filled GitHub issue form.
+const GH_REPO = "KMueller-Lab/Global-Macro-Database-Internal";
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+const LABEL_TITLE = {
+  "source-systemic":   "Source-systemic — same source wrong across many series",
+  "variable-systemic": "Variable-systemic — same variable wrong across many countries",
+  "country-systemic":  "Country-systemic — one country wrong across many variables",
+  "idiosyncratic":     "Idiosyncratic — one-off cells",
+};
+const LABEL_ORDER = ["source-systemic", "variable-systemic", "country-systemic", "idiosyncratic"];
+
+function ghNewIssueUrl(title, bodyMd, labels) {
+  const u = new URL(`https://github.com/${GH_REPO}/issues/new`);
+  u.searchParams.set("title", title);
+  u.searchParams.set("body", bodyMd);
+  if (labels) u.searchParams.set("labels", labels);
+  return u.toString();
+}
+
+function findingYears(f) {
+  if (f.year_min == null && f.year_max == null) return "";
+  if (f.year_min === f.year_max) return String(f.year_min);
+  return `${f.year_min}–${f.year_max}`;
+}
+
+// One finding -> a GitHub issue title + markdown body.
+function issueForFinding(f) {
+  const yrs = findingYears(f);
+  const title = `[GMD data] ${f.iso3} ${f.variable}`
+    + (f.likely_source ? ` (${f.likely_source})` : "")
+    + (yrs ? ` ${yrs}` : "");
+  const lines = [
+    `**Country / variable:** \`${f.iso3}\` · \`${f.variable}\``,
+    `**Likely source:** ${f.likely_source || "(unattributed)"}  _(${f.label}`
+      + (f.n_siblings ? `, ${f.n_siblings} related finding${f.n_siblings === 1 ? "" : "s"}` : "") + `)_`,
+  ];
+  if (yrs) lines.push(`**Flagged years:** ${yrs}`);
+  if (f.flags && f.flags.length) {
+    // Render human check names, not raw short codes.
+    const named = f.flags.map((k) => REASON_INFO[k]?.label || k);
+    lines.push(`**Checks fired:** ${named.join(", ")}`);
+  }
+  if (f.issue_tags && f.issue_tags.length)
+    lines.push(`**Reviewer tagged sources:** ${f.issue_tags.join(", ")}`);
+  // Prefer the LLM cluster-aware diagnosis; fall back to the generic per-check
+  // heuristic hints when it hasn't been generated yet.
+  const dg = f.diagnosis || {};
+  const hasLLM = dg.likely_cause && !/^\*\(/.test(dg.likely_cause);
+  if (hasLLM) {
+    lines.push("");
+    lines.push(`**Likely cause** _(${dg.confidence || "—"} confidence)_: ${dg.likely_cause}`);
+    if (dg.potential_solution) lines.push(`**Potential solution:** ${dg.potential_solution}`);
+    if (dg.suggested_investigation && dg.suggested_investigation.length) {
+      lines.push("**Investigate:**");
+      for (const s of dg.suggested_investigation) lines.push(`- ${s}`);
+    }
+  } else {
+    const hints = [...new Set((f.flags || []).map((k) => FIX_HINT[k]).filter(Boolean))];
+    if (hints.length) {
+      lines.push("");
+      lines.push("**Suggested fix (heuristic):**");
+      for (const h of hints) lines.push(`- ${h}`);
+    }
+  }
+  lines.push("");
+  lines.push("**Reviewer comment:**");
+  lines.push(f.comment_clean ? `> ${f.comment_clean.replace(/\n/g, "\n> ")}` : "> _(no prose comment)_");
+  if (f.sibling_keys && f.sibling_keys.length) {
+    lines.push("");
+    lines.push(`**Other findings sharing this source:** ${f.sibling_keys.join(", ")}`);
+  }
+  lines.push("");
+  lines.push("---");
+  lines.push("_Filed from the GMD audit dashboard (Findings tab)._");
+  return { title, body: lines.join("\n") };
+}
+
+// A whole bucket (e.g. every source-systemic Mitchell finding) -> one issue.
+function issueForBucket(label, bucket, items) {
+  const title = `[GMD data] ${bucket || "(unattributed)"} ${label} — ${items.length} finding${items.length === 1 ? "" : "s"}`;
+  const lines = [
+    `**Likely source / root cause:** ${bucket || "(unattributed)"}  _(${label})_`,
+    `**${items.length} confirmed finding${items.length === 1 ? "" : "s"}** share this source. Fixing the shared root cause should clear all of them.`,
+    "",
+  ];
+  for (const f of items) {
+    const yrs = findingYears(f);
+    lines.push(`- [ ] **${f.iso3} ${f.variable}**${yrs ? ` (${yrs})` : ""}`
+      + (f.flags && f.flags.length ? ` — _${f.flags.join(", ")}_` : ""));
+    if (f.comment_clean) {
+      const c = f.comment_clean.replace(/\s+/g, " ").trim();
+      lines.push(`  - ${c.length > 220 ? c.slice(0, 220) + "…" : c}`);
+    }
+  }
+  lines.push("");
+  lines.push("---");
+  lines.push("_Filed from the GMD audit dashboard (Findings tab)._");
+  return { title, body: lines.join("\n") };
+}
+
+// Build a finding-shaped object for the pair currently shown in the graph
+// view, so "Draft issue" works identically there. Prefer the rich finding
+// from /findings if this pair is one; otherwise synthesize from the pair's
+// flags + the live comment text.
+function currentPairFinding() {
+  const p = STATE.data?.pairs?.[STATE.currentIdx];
+  if (!p) return null;
+  const key = `${p.iso3}_${p.var}`;
+  const existing = (STATE.findings?.findings || []).find((x) => x.key === key);
+  if (existing) {
+    // Fold in any just-typed comment so a fresh edit isn't lost.
+    const live = ($("comment")?.value || "").trim();
+    if (live && live !== existing.comment) {
+      return { ...existing, comment: live,
+               comment_clean: live.replace(/\[ISSUE-[A-Za-z0-9_]+\]/g, "").trim(),
+               issue_tags: [...new Set((live.match(/\[ISSUE-([A-Za-z0-9_]+)\]/g) || [])
+                              .map((s) => s.replace(/\[ISSUE-|\]/g, "")))] };
+    }
+    return existing;
+  }
+  const comment = ($("comment")?.value || STATE.comments[key]?.comment || "").trim();
+  const tags = [...new Set((comment.match(/\[ISSUE-([A-Za-z0-9_]+)\]/g) || [])
+                  .map((s) => s.replace(/\[ISSUE-|\]/g, "")))];
+  const flags = [...new Set(pairAllFlags(p).map((fl) => fl.kind.split(":").pop()))];
+  return {
+    key, iso3: p.iso3, variable: p.var, comment,
+    comment_clean: comment.replace(/\[ISSUE-[A-Za-z0-9_]+\]/g, "").trim(),
+    issue_tags: tags, likely_source: tags[0] || null,
+    flags, year_min: p.year_min ?? null, year_max: p.year_max ?? null,
+    n_siblings: 0, sibling_keys: [], n_cells: 0, label: "idiosyncratic",
+  };
+}
+
+function draftIssueForCurrentPair() {
+  const f = currentPairFinding();
+  if (!f) return;
+  const { title, body } = issueForFinding(f);
+  window.open(ghNewIssueUrl(title, body, "data-quality"), "_blank", "noopener");
+}
+
+async function loadFindings(force) {
+  const view = $("findings-view");
+  // Show cached results instantly (snappy tab toggles), but ALWAYS re-fetch
+  // from the server so the count reflects reviews made since the last load.
+  // Errors marked in the Review tab land in the local ledger immediately, so
+  // a fresh /findings rebuild picks them up -- no sync/push required.
+  if (STATE.findings && !force) renderFindings();
+  else view.innerHTML = `<div id="findings-empty">Loading findings…</div>`;
+  try {
+    const r = await fetch("findings", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    STATE.findings = await r.json();
+  } catch (e) {
+    if (!STATE.findings) {
+      view.innerHTML = `<div id="findings-empty">Could not load findings (${esc(e.message)}).<br>`
+        + `Is <code>serve.py</code> running?</div>`;
+    }
+    return;  // keep showing cached data if we already had some
+  }
+  renderFindings();
+}
+
+function bucketKeyOf(label, bucket) { return `${label}|${bucket || "(unattributed)"}`; }
+
+function findingMatchesFilter(f, q, flag) {
+  if (flag && !(f.flags || []).includes(flag)) return false;
+  if (q) {
+    const hay = (`${f.iso3} ${f.variable} ${f.likely_source || ""} `
+      + `${(f.issue_tags || []).join(" ")} ${f.comment_clean || ""}`).toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  return true;
+}
+
+// Build the static chrome (filter bar + list container) once per load, then
+// delegate the grouped list to renderFindingsList so live filtering/collapse
+// don't rebuild (and refocus) the filter inputs.
+function renderFindings() {
+  const data = STATE.findings || { findings: [] };
+  const items = data.findings || [];
+  const badge = $("findings-count");
+  if (items.length) { badge.textContent = items.length; badge.style.display = ""; }
+  else { badge.style.display = "none"; }
+
+  const view = $("findings-view");
+  if (!items.length) {
+    view.innerHTML = `<div id="findings-empty">No open findings.<br>`
+      + `Errors you mark with <b>← Error</b> in the Review tab show up here, `
+      + `grouped by likely source.</div>`;
+    return;
+  }
+
+  const flt = STATE.findingsFilter;
+  const allFlags = [...new Set(items.flatMap((f) => f.flags || []))].sort();
+  const flagOpts = [`<option value="">all flag types</option>`].concat(
+    allFlags.map((fl) => `<option value="${esc(fl)}"${flt.flag === fl ? " selected" : ""}>${esc(fl)}</option>`)
+  ).join("");
+
+  view.innerHTML =
+    `<div class="findings-bar">`
+    + `<input id="findings-q" type="search" placeholder="filter country / variable / source / comment…" value="${esc(flt.q)}">`
+    + `<select id="findings-flag">${flagOpts}</select>`
+    + `<button id="findings-expand-all" type="button" title="Expand every source group">expand all</button>`
+    + `<button id="findings-collapse-all" type="button" title="Collapse every source group">collapse all</button>`
+    + `<span class="grow"></span>`
+    + `<span id="findings-summary"></span>`
+    + `<a href="#" id="findings-refresh">refresh</a>`
+    + `</div>`
+    + `<div id="findings-list"></div>`;
+
+  $("findings-q").addEventListener("input", (e) => {
+    STATE.findingsFilter.q = e.target.value.trim().toLowerCase();
+    STATE.findingsReturnScroll = false;  // user is navigating manually now
+    renderFindingsList();
+  });
+  $("findings-flag").addEventListener("change", (e) => {
+    STATE.findingsFilter.flag = e.target.value;
+    STATE.findingsReturnScroll = false;
+    renderFindingsList();
+  });
+  $("findings-refresh").addEventListener("click", (e) => { e.preventDefault(); loadFindings(true); });
+  $("findings-expand-all").addEventListener("click", () => {
+    STATE.findingsCollapsed = {}; STATE.findingsReturnScroll = false; renderFindingsList();
+  });
+  $("findings-collapse-all").addEventListener("click", () => {
+    for (const f of items) STATE.findingsCollapsed[bucketKeyOf(f.label, f.likely_source)] = true;
+    STATE.findingsReturnScroll = false; renderFindingsList();
+  });
+
+  renderFindingsList();
+}
+
+function renderFindingsList() {
+  const data = STATE.findings || { findings: [] };
+  const all = data.findings || [];
+  const { q, flag } = STATE.findingsFilter;
+  const items = all.filter((f) => findingMatchesFilter(f, q, flag));
+
+  const summary = $("findings-summary");
+  if (summary) {
+    summary.textContent = (q || flag)
+      ? `${items.length} of ${all.length} shown`
+      : `${all.length} open finding${all.length === 1 ? "" : "s"}`
+        + (data.generated ? ` · refreshed ${data.generated.replace("T", " ").replace("+00:00", "Z")}` : "");
+  }
+
+  const listEl = $("findings-list");
+  if (!listEl) return;
+  if (!items.length) {
+    listEl.innerHTML = `<div id="findings-empty">No findings match the filter.</div>`;
+    return;
+  }
+
+  const byLabel = {};
+  for (const f of items) (byLabel[f.label] = byLabel[f.label] || []).push(f);
+
+  const parts = [];
+  for (const label of LABEL_ORDER) {
+    const group = byLabel[label];
+    if (!group || !group.length) continue;
+    parts.push(`<h3>${esc(label)} <span class="label-note">— ${esc(LABEL_TITLE[label].split("—")[1].trim())} (${group.length})</span></h3>`);
+
+    const byBucket = {};
+    for (const f of group) (byBucket[f.likely_source || "(unattributed)"] = byBucket[f.likely_source || "(unattributed)"] || []).push(f);
+    const buckets = Object.keys(byBucket).sort((a, b) => byBucket[b].length - byBucket[a].length || a.localeCompare(b));
+
+    for (const bucket of buckets) {
+      const list = byBucket[bucket];
+      const bk = bucketKeyOf(label, bucket);
+      const collapsed = !!STATE.findingsCollapsed[bk];
+      const canCombine = list.length > 1;
+      parts.push(`<div class="find-bucket">`);
+      parts.push(`<div class="find-bucket-head" data-bucket="${esc(bk)}" title="Click to ${collapsed ? "expand" : "collapse"} this source group">`
+        + `<span class="chev">${collapsed ? "▸" : "▾"}</span>`
+        + `<span class="src">${esc(bucket)}</span>`
+        + `<span class="grow">${list.length} finding${list.length === 1 ? "" : "s"}</span>`
+        + (canCombine
+            ? `<button data-combine="${esc(label)}|${esc(bucket)}" title="Open one pre-filled GitHub issue covering all ${list.length} findings under this source">📋 Draft combined issue</button>`
+            : ``)
+        + `</div>`);
+      if (!collapsed) {
+        for (const f of list) {
+          const yrs = findingYears(f);
+          // Error description: human check names (with the check's help as tooltip).
+          const flagsHtml = (f.flags || []).map((x) =>
+            `<span class="find-badge" title="${esc(REASON_INFO[x]?.help || x)}">${esc(REASON_INFO[x]?.label || x)}</span>`).join("");
+          // LLM cluster-aware diagnosis (cause + potential solution). Cache-only
+          // in findings.json: a placeholder until a keyed diagnose.py run warms it.
+          const dg = f.diagnosis || {};
+          const hasSolution = dg.potential_solution && dg.potential_solution.trim();
+          const diagHtml = hasSolution
+            ? `<div class="fc-solution"><span class="fc-soln-h">Potential solution`
+                + (dg.confidence && dg.confidence !== "—" ? ` · ${esc(dg.confidence)} confidence` : ``)
+                + `</span>${esc(dg.potential_solution)}`
+                + (dg.likely_cause ? `<div class="fc-cause"><b>Likely cause:</b> ${esc(dg.likely_cause)}</div>` : ``)
+                + `</div>`
+            : `<div class="fc-solution pending">LLM solution not generated yet — run <code>diagnose.py</code> with ANTHROPIC_API_KEY to populate.</div>`;
+          const isLast = f.key === STATE.lastFindingKey ? " is-last" : "";
+          parts.push(`<div class="find-card${isLast}" data-key="${esc(f.key)}" role="button" tabindex="0" title="Open ${esc(f.iso3)} ${esc(f.variable)} in the graph view">`
+            + `<div class="fc-main">`
+            + `<div class="fc-pair">${esc(f.iso3)} ${esc(f.variable)}${yrs ? ` <span style="color:var(--muted);font-weight:400">· ${esc(yrs)}</span>` : ``}</div>`
+            + `<div class="fc-meta">${flagsHtml}${f.n_cells ? ` ${f.n_cells} flagged cell${f.n_cells === 1 ? "" : "s"}` : ``}`
+            + (f.issue_tags && f.issue_tags.length ? ` · tagged: ${esc(f.issue_tags.join(", "))}` : ``)
+            + `</div>`
+            + `<div class="fc-comment">${esc(f.comment_clean || "(no prose comment)")}</div>`
+            + diagHtml
+            + `</div>`
+            + `<div class="fc-actions">`
+            + `<button data-issue="${esc(f.key)}" title="Open a pre-filled GitHub issue for this finding">📋 Draft issue</button>`
+            + `</div></div>`);
+        }
+      }
+      parts.push(`</div>`);
+    }
+  }
+  listEl.innerHTML = parts.join("");
+
+  const findByKey = (k) => all.find((f) => f.key === k);
+  // Collapsible source groups (ignore clicks on the combined-issue button).
+  listEl.querySelectorAll(".find-bucket-head").forEach((h) =>
+    h.addEventListener("click", (e) => {
+      if (e.target.closest("[data-combine]")) return;
+      const bk = h.dataset.bucket;
+      STATE.findingsCollapsed[bk] = !STATE.findingsCollapsed[bk];
+      STATE.findingsReturnScroll = false;
+      renderFindingsList();
+    }));
+  // Whole card navigates to the graph view; keyboard-activate too.
+  listEl.querySelectorAll(".find-card").forEach((card) => {
+    card.addEventListener("click", () => jumpToFinding(card.dataset.key));
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpToFinding(card.dataset.key); }
+    });
+  });
+  listEl.querySelectorAll("[data-issue]").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const f = findByKey(b.dataset.issue);
+      if (!f) return;
+      const { title, body } = issueForFinding(f);
+      window.open(ghNewIssueUrl(title, body, "data-quality"), "_blank", "noopener");
+    }));
+  listEl.querySelectorAll("[data-combine]").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const [label, bucket] = b.dataset.combine.split("|");
+      const list = all.filter((f) => f.label === label && (f.likely_source || "(unattributed)") === bucket);
+      const { title, body } = issueForBucket(label, bucket, list);
+      window.open(ghNewIssueUrl(title, body, "data-quality"), "_blank", "noopener");
+    }));
+
+  // Return-to-your-place: after re-entering the tab, scroll the last-opened
+  // finding into view (it's also highlighted via .is-last).
+  if (STATE.findingsReturnScroll && STATE.lastFindingKey) {
+    const el = listEl.querySelector(`.find-card[data-key="${CSS.escape(STATE.lastFindingKey)}"]`);
+    if (el) requestAnimationFrame(() => el.scrollIntoView({ block: "center" }));
+  }
+}
+
+// Jump from a finding to its (country, variable) pair in the Review tab.
+function jumpToFinding(key) {
+  const f = (STATE.findings?.findings || []).find((x) => x.key === key);
+  if (!f || !STATE.data) return;
+  const idx = STATE.data.pairs.findIndex((p) => p.iso3 === f.iso3 && p.var === f.variable);
+  if (idx < 0) { alert(`${f.iso3} ${f.variable} is not in the current pair list.`); return; }
+  STATE.lastFindingKey = key;
+  // Make sure its source group is expanded so it's visible when we return.
+  STATE.findingsCollapsed[bucketKeyOf(f.label, f.likely_source)] = false;
+  switchTab("review");
+  goTo(idx);
+}
+
+function switchTab(tab) {
+  STATE.activeTab = tab;
+  document.querySelectorAll(".main-tab").forEach((b) =>
+    b.classList.toggle("on", b.dataset.tab === tab));
+  $("app").classList.toggle("findings-mode", tab === "findings");
+  if (tab === "findings") { STATE.findingsReturnScroll = true; loadFindings(); return; }
+  // Returning to review: the chart lived in a display:none container while
+  // findings was open, so Plotly holds a stale 0x0 layout and paints nothing.
+  // Resize once layout has settled, then bring the chart into view.
+  requestAnimationFrame(() => {
+    try { Plotly.Plots.resize("chart"); } catch (_) {}
+    $("chart")?.scrollIntoView({ block: "start" });
+  });
+}
+
+function bind() {
+  // Close the flag popover on any outside click.
+  document.addEventListener("click", (ev) => {
+    const pop = $("flag-popover");
+    if (!pop || pop.style.display === "none") return;
+    if (pop.contains(ev.target)) return;
+    if (ev.target.closest && ev.target.closest("th.src-flagged")) return;
+    pop.style.display = "none";
+    document.querySelectorAll("th.src-flagged.open")
+      .forEach((x) => x.classList.remove("open"));
+  });
+
+  // Top-level tab strip (Review | Findings).
+  document.querySelectorAll(".main-tab").forEach((b) => {
+    b.addEventListener("click", () => switchTab(b.dataset.tab));
+  });
+
+  $("approve-btn").addEventListener("click", approveAndNext);
+  $("error-btn").addEventListener("click", errorAndNext);
+  $("limitation-btn").addEventListener("click", limitationAndNext);
+  $("draft-issue-btn").addEventListener("click", draftIssueForCurrentPair);
+  $("undo-btn").addEventListener("click", popUndo);
+  $("undo-btn").disabled = true;
+  $("legend-btn").addEventListener("click", () => toggleShortcutsOverlay());
+  $("sync-btn").addEventListener("click", () => syncToRemote());
+  $("regen-btn").addEventListener("click", () => regenFlags());
+  $("apply-btn").addEventListener("click", () => applyApprovals());
+  refreshRegenStatus();
+  setInterval(refreshRegenStatus, 30000);
+  $("history-toggle").addEventListener("click", () => showHistory());
+  $("logscale").addEventListener("change", () => {
+    try { localStorage.setItem("dqr_log", $("logscale").checked ? "1" : "0"); } catch (_) {}
+    renderChartAndTable();
+  });
+  // View-mode toggle (levels / YoY / rebased) -- three buttons; clicking
+  // one sets it active and persists the choice. The "v" key cycles
+  // through them in order.
+  $("viewmode").querySelectorAll(".view-btn").forEach((b) => {
+    b.addEventListener("click", () => setViewMode(b.dataset.view));
+  });
+  // Re-render chart whenever the user changes the anchor year manually.
+  $("anchor-year").addEventListener("input", () => {
+    if ($("viewmode").dataset.value === "rebased") renderChartAndTable();
+  });
+  $("search").addEventListener("input", renderSidebar);
+  $("filter").addEventListener("change", () => {
+    try { localStorage.setItem("dqr_filter", $("filter").value); } catch (_) {}
+    $("new-weeks-row").style.display = $("filter").value === "new" ? "" : "none";
+    renderSidebar();
+  });
+  $("new-weeks").addEventListener("input", () => {
+    if ($("filter").value === "new") renderSidebar();
+  });
+  // Sort is two toggle buttons (default | suspicion). Clicking one sets it
+  // active and persists the choice; the other clears.
+  $("sort").querySelectorAll(".sort-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      $("sort").dataset.value = b.dataset.sort;
+      $("sort").querySelectorAll(".sort-btn").forEach((x) =>
+        x.classList.toggle("on", x === b));
+      try { localStorage.setItem("dqr_sort", b.dataset.sort); } catch (_) {}
+      renderSidebar();
+    });
+  });
+  // Reason-filter dropdown: open/close on the button, list rendered by
+  // renderReasonFilter() after data load, All/None/Done helpers wired here.
+  $("reason-filter-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const m = $("reason-filter-menu");
+    m.hidden = !m.hidden;
+  });
+  $("reason-filter-close").addEventListener("click", () => {
+    $("reason-filter-menu").hidden = true;
+  });
+  $("reason-filter-all").addEventListener("click", () => {
+    setExcludedReasons(new Set());
+    renderReasonFilter();
+    renderSidebar();
+  });
+  $("reason-filter-none").addEventListener("click", () => {
+    setExcludedReasons(presentReasons());
+    renderReasonFilter();
+    renderSidebar();
+  });
+  // Click outside the menu closes it (but not when clicking the button itself).
+  document.addEventListener("click", (e) => {
+    const m = $("reason-filter-menu");
+    if (m.hidden) return;
+    if (m.contains(e.target) || $("reason-filter-btn").contains(e.target)) return;
+    m.hidden = true;
+  });
+
+  // Reviewer "change" button -> prompt + persist.
+  $("reviewer-edit").addEventListener("click", () => promptReviewer(true));
+
+  // Source-issue buttons are populated per pair in renderSourceButtons() and
+  // get their click handlers attached at render time. Nothing static to bind.
+
+  // textarea: track dirty + save on blur + keep source buttons in sync if
+  // the user manually edited [ISSUE-*] tags by typing.
+  $("comment").addEventListener("input", () => {
+    STATE.unsavedDirty = true;
+    setSaveStatus("unsaved…");
+    const text = $("comment").value;
+    for (const b of $("tag-row").querySelectorAll(".src-btn")) {
+      b.classList.toggle("on", commentHasTag(text, b.dataset.src));
+    }
+  });
+  $("comment").addEventListener("blur", () => { if (STATE.unsavedDirty) saveCurrent(); });
+
+  // Keyboard shortcuts. Two modes — inside the textarea vs. outside.
+  //
+  // OUTSIDE the textarea (sidebar / chart / source buttons / body):
+  //   →           next pair
+  //   ←           previous pair
+  //   Enter       approve & next
+  //   A           approve & next
+  //   L           toggle log scale
+  //
+  // INSIDE the textarea (default focus, where dictation lands):
+  //   plain arrows / Enter behave normally — character cursor / newline.
+  //   Cmd/Ctrl + → / ← / Enter substitute for the plain versions when you
+  //   want to navigate without leaving the textarea.
+  //
+  // BOTH modes:
+  //   Cmd/Ctrl + ] / [   cycle next/prev source-issue tag
+  //   Esc                 jump focus back to the textarea
+  // Capture-phase listener so Esc and the other plain shortcuts fire even
+  // when Plotly's chart elements would otherwise swallow the keydown.
+  // Esc + Cmd/Ctrl+Z always run; the rest still respect inField.
+  document.addEventListener("keydown", (e) => {
+    const inField = e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT";
+
+    // Cmd/Ctrl + Z anywhere -- undo last Approve / Error decision.
+    if ((e.metaKey || e.ctrlKey) && (e.key === "z" || e.key === "Z")) {
+      e.preventDefault(); popUndo(); return;
+    }
+    // Esc -- BLUR the currently-focused element (comment textarea, search
+    // box, chart modebar, anywhere) so the plain-key shortcuts work
+    // again. Also dismisses overlays / popovers as a side effect. Use
+    // `c` afterwards to put focus back into the comment box.
+    if (e.key === "Escape") {
+      hideShortcutsOverlay();
+      const pop = $("flag-popover");
+      if (pop) pop.style.display = "none";
+      document.querySelectorAll("th.src-flagged.open")
+        .forEach((x) => x.classList.remove("open"));
+      if (document.activeElement && document.activeElement !== document.body
+          && typeof document.activeElement.blur === "function") {
+        document.activeElement.blur();
+      }
+      return;
+    }
+    // Shortcuts only fire when the textarea / sidebar inputs don't have focus,
+    // so the user can type freely inside the comment box.
+    if (inField) return;
+    // Decision shortcuts: → approve, ← error.
+    if (e.key === "ArrowRight")       { e.preventDefault(); approveAndNext(); return; }
+    if (e.key === "ArrowLeft")        { e.preventDefault(); errorAndNext();   return; }
+    // ↑/↓ -- show the shortcuts overlay while held.
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault(); showShortcutsOverlay(); return;
+    }
+    // Single-letter shortcuts.
+    if (e.key === "/")                 { e.preventDefault(); $("search").focus(); }
+    else if (e.key === "s" || e.key === "S") { e.preventDefault(); syncToRemote(); }
+    else if (e.key === "c" || e.key === "C") { e.preventDefault(); $("comment").focus(); }
+    else if (e.key === "k" || e.key === "K") { e.preventDefault(); limitationAndNext(); }
+    else if (e.key === "u" || e.key === "U") { e.preventDefault(); jumpToNextUnreviewed(); }
+    else if (e.key === "i" || e.key === "I") { e.preventDefault(); cycleSourceTag(+1); }
+    else if (e.key === "v" || e.key === "V") { e.preventDefault(); cycleViewMode(); }
+  });
+  // Releasing ↑/↓ hides the shortcuts overlay (toggle pattern lets the
+  // user tap once to peek and click off to dismiss, OR hold to see-while-thinking).
+  document.addEventListener("keyup", (e) => {
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") hideShortcutsOverlay();
+  });
+
+  // Cycle through source buttons. Each press selects ONE peer source — but
+  // Mitchell stays tagged alongside it, since most peer issues implicate
+  // Cycle through the source-issue buttons selecting EXACTLY ONE at a
+  // time. Pressing the "i" key repeatedly walks BIS -> BORDO -> ... in
+  // the displayed order, each press replacing the previous tag set with
+  // just the newly-focused source. No auto-Mitchell tagging.
+  STATE.sourceCycleIdx = -1;
+  window.cycleSourceTag = function (dir) {
+    const buttons = $("tag-row").querySelectorAll(".src-btn");
+    if (!buttons.length) return;
+    STATE.sourceCycleIdx = (STATE.sourceCycleIdx + dir + buttons.length) % buttons.length;
+    const target = buttons[STATE.sourceCycleIdx].dataset.src;
+    // Strip every existing [ISSUE-*] tag, then insert just the focused one.
+    const ta = $("comment");
+    let text = ta.value.replace(/\s*\[ISSUE-[\w\-]+\]\s*/g, " ").trim();
+    text = `[ISSUE-${target}]` + (text ? " " + text : "");
+    ta.value = text;
+    // Sync button visuals: only the focused source is on.
+    for (const b of buttons) {
+      b.classList.toggle("on", b.dataset.src === target);
+    }
+    STATE.unsavedDirty = true;
+    setSaveStatus("unsaved…");
+    // Pulse the just-selected button.
+    const btn = buttons[STATE.sourceCycleIdx];
+    btn.classList.add("kbfocus");
+    setTimeout(() => btn.classList.remove("kbfocus"), 600);
+  };
+
+  window.addEventListener("beforeunload", (e) => {
+    if (STATE.unsavedDirty) {
+      saveCurrent();
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+}
+
+(async function init() {
+  try {
+    await Promise.all([loadData(), loadComments()]);
+  } catch (e) {
+    document.body.innerHTML = `<div style="padding:24px;color:#dc2626"><b>Error loading data:</b> ${e.message}<br><br>Did you run <code>python build_data.py</code> first?</div>`;
+    return;
+  }
+  // Generate filter chips dynamically from the reason types actually
+  // present in the loaded data, grouped by category.
+  renderReasonFilter();
+  // Load reviewer identity; prompt for one if unset (first run).
+  refreshReviewer(/*promptIfEmpty=*/true);
+  loadHiddenSources();
+  // log scale defaults ON; only honour an explicit opt-out
+  try {
+    const log = localStorage.getItem("dqr_log");
+    if (log === "0") $("logscale").checked = false;
+  } catch (_) {}
+  // flag-chip selection is restored inside renderFilterChips() now that
+  // the chips are generated dynamically; nothing to do here.
+  // restore filter + sort preferences. New users get sensible defaults
+  // ("only unreviewed" + "most suspicious first") — explicit user choices
+  // saved in localStorage win over the defaults.
+  try {
+    const f = localStorage.getItem("dqr_filter");
+    if (f && [...$("filter").options].some((o) => o.value === f)) {
+      $("filter").value = f;
+    } else {
+      $("filter").value = "unreviewed";
+    }
+  } catch (_) { $("filter").value = "unreviewed"; }
+  $("new-weeks-row").style.display = $("filter").value === "new" ? "" : "none";
+  // Always open sorted by "most suspicious" (overrides any saved sort) so
+  // the worst pairs are at the top of the list on every launch.
+  $("sort").dataset.value = "suspicion";
+  $("sort").querySelectorAll(".sort-btn").forEach((b) =>
+    b.classList.toggle("on", b.dataset.sort === "suspicion"));
+  // View mode always starts at "levels" and resets to it on every pair (see
+  // goTo), so there's no cross-load view-mode to restore here.
+  bind();
+  // Build the filtered+sorted list, then open at its FIRST entry (top of
+  // the list, shown in the chart). No "restore last position" -- every
+  // launch starts at the most-suspicious unreviewed pair.
+  applyFilter();
+  const firstIdx = STATE.filteredIdx.length ? STATE.filteredIdx[0] : 0;
+  goTo(firstIdx);
+})();
+</script>
+</body>
+</html>

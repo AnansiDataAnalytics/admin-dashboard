@@ -1,0 +1,23 @@
+# Generated data + comments — should not be tracked
+data.json
+comments.json
+comments.log
+flags.parquet
+flags_raw.parquet
+flags_manifest.json
+findings.json
+audit.db
+audit.db-journal
+backups/
+
+# Python cruft
+__pycache__/
+*.pyc
+.tmp.*.json
+diagnose_cache.json
+reviewer.json
+snapshots/
+
+# always-on supervisor logs (autoserve.sh / launchd agent)
+autoserve.log
+autoserve.out

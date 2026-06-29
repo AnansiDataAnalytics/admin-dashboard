@@ -8,6 +8,7 @@ flags_manifest.json
 findings.json
 audit.db
 audit.db-journal
+vetting.jsonl
 backups/
 
 # Python cruft

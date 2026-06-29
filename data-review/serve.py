@@ -69,9 +69,15 @@ if _ledger_spec and _ledger_spec.loader:
         ledger = None
 else:
     ledger = None
-# When True, regenerate docs/MITCHELL_AUDIT_LOG.md after every successful save
-# so the markdown source-of-truth never drifts more than one save behind.
-AUTO_REBUILD_AUDIT_LOG = True
+# Embedded mode (default ON for this data-review copy): disable everything that
+# reaches OUTSIDE data-review/ -- no git commit/push, no docs/*.md rebuilds, no heavy
+# rebuild subprocesses. The browser-facing embed must never mutate the host repo.
+# Set DATA_REVIEW_EMBED=0 to restore the original standalone behavior.
+EMBED_MODE = os.environ.get("DATA_REVIEW_EMBED", "1") != "0"
+
+# When True, regenerate docs/GMD_AUDIT_LOG.md after every successful save. Off in
+# embedded mode (those docs live in the grandfathered GMD repo, not here).
+AUTO_REBUILD_AUDIT_LOG = not EMBED_MODE
 
 if not COMMENTS_PATH.exists():
     COMMENTS_PATH.write_text("{}")
@@ -314,8 +320,8 @@ def rebuild_findings() -> None:
     """Refresh findings.json via `diagnose.py --json`. Best-effort; run lazily
     when the Findings tab requests /findings so the feed reflects the latest
     pending-fix decisions without slowing down every comment save."""
-    if not DIAGNOSE_PY.exists():
-        return
+    if EMBED_MODE or not DIAGNOSE_PY.exists():
+        return  # embed: diagnose.py is GMD-coupled (reads data/final, writes docs/); skip
     try:
         subprocess.run(
             [sys.executable, str(DIAGNOSE_PY), "--json"],
@@ -793,6 +799,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
+        # Embed: the git-mutating + heavy-rebuild endpoints are disabled (build/sync
+        # happen in the pipeline, not from the browser-facing app).
+        if EMBED_MODE and self.path in ("/sync", "/regen", "/resuppress"):
+            self._send_json(403, {"error": "disabled in embedded mode"})
+            return
         if self.path == "/sync":
             r = commit_and_push_audit_logs()
             self._send_json(200 if r.get("ok") else 500, r)
@@ -903,9 +914,10 @@ def main(argv: list[str]) -> int:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print("\nshutting down — final backup + audit-log commit/push...")
+            print("\nshutting down — final backup...")
             maybe_backup(force=True)
-            final_commit_and_push()
+            if not EMBED_MODE:
+                final_commit_and_push()
     return 0
 
 

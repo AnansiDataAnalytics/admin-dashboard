@@ -320,12 +320,12 @@ def rebuild_findings() -> None:
     """Refresh findings.json via `diagnose.py --json`. Best-effort; run lazily
     when the Findings tab requests /findings so the feed reflects the latest
     pending-fix decisions without slowing down every comment save."""
-    if EMBED_MODE or not DIAGNOSE_PY.exists():
-        return  # embed: diagnose.py is GMD-coupled (reads data/final, writes docs/); skip
+    if not DIAGNOSE_PY.exists():
+        return  # diagnose.py is now data-root aware and writes only inside data-review/
     try:
         subprocess.run(
             [sys.executable, str(DIAGNOSE_PY), "--json"],
-            cwd=str(ROOT.parent), timeout=60, check=False, capture_output=True,
+            cwd=str(ROOT), timeout=60, check=False, capture_output=True,
         )
     except Exception as e:
         print(f"[warn] findings rebuild failed: {e}")

@@ -32,11 +32,24 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent
+# Input data root (a GMD/WED checkout), same resolution as build_data.py/flags.py:
+# DATA_REVIEW_DATA_ROOT env -> gitignored .data_root file -> parents[1]. Outputs stay
+# next to this script (data-review/), never the host repo.
+def _resolve_data_root() -> Path:
+    env = os.environ.get("DATA_REVIEW_DATA_ROOT")
+    if env:
+        return Path(env).resolve()
+    local = ROOT / ".data_root"
+    if local.exists():
+        return Path(local.read_text().strip()).resolve()
+    return Path(__file__).resolve().parents[1]
+
+DATA_ROOT = _resolve_data_root()
 VETTING_PATH = ROOT / "vetting.jsonl"
 FLAGS_PATH = ROOT / "flags.parquet"
-FINAL_DIR = REPO / "data" / "final"
+FINAL_DIR = DATA_ROOT / "data" / "final"
 CACHE_PATH = ROOT / "diagnose_cache.json"
-OUT = REPO / "docs" / "PENDING_FIXES.md"
+OUT = ROOT / "PENDING_FIXES.md"   # embed: write next to the app, not the host repo's docs/
 FINDINGS_OUT = ROOT / "findings.json"   # machine-readable feed for the dashboard "Findings" tab
 
 # Anthropic model. claude-opus-4-7 is the default; override with the

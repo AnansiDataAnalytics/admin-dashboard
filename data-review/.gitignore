@@ -6,6 +6,7 @@ flags.parquet
 flags_raw.parquet
 flags_manifest.json
 findings.json
+PENDING_FIXES.md
 audit.db
 audit.db-journal
 vetting.jsonl

@@ -1,0 +1,21 @@
+# Exclude local state/scratch. data.json + flags.parquet ARE baked into the image
+# (v1 serves them directly for a fast, reliable App Runner start; rebuild to refresh).
+_scratch/
+.data_root
+flags_raw.parquet
+flags_manifest.json
+findings.json
+comments.json
+comments.log
+audit.db
+audit.db-journal
+vetting.jsonl
+backups/
+snapshots/
+__pycache__/
+*.pyc
+PENDING_FIXES.md
+diagnose_cache.json
+reviewer.json
+autoserve.log
+autoserve.out

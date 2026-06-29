@@ -1,0 +1,40 @@
+{
+  "ServiceName": "data-review",
+  "SourceConfiguration": {
+    "ImageRepository": {
+      "ImageIdentifier": "566474062827.dkr.ecr.ap-southeast-1.amazonaws.com/data-review:latest",
+      "ImageRepositoryType": "ECR",
+      "ImageConfiguration": {
+        "Port": "8080",
+        "RuntimeEnvironmentVariables": {
+          "DATA_REVIEW_EMBED": "1",
+          "DATA_REVIEW_DB": "data_review",
+          "DATA_REVIEW_BIND": "0.0.0.0",
+          "PORT": "8080",
+          "AWS_REGION": "ap-southeast-1",
+          "DATA_REVIEW_IDLE_TIMEOUT": "0"
+        },
+        "RuntimeEnvironmentSecrets": {
+          "MONGODB_URI": "arn:aws:ssm:ap-southeast-1:566474062827:parameter/mongodb/data-review/uri"
+        }
+      }
+    },
+    "AutoDeploymentsEnabled": false,
+    "AuthenticationConfiguration": {
+      "AccessRoleArn": "arn:aws:iam::566474062827:role/data-review-apprunner-access"
+    }
+  },
+  "InstanceConfiguration": {
+    "Cpu": "1 vCPU",
+    "Memory": "2 GB",
+    "InstanceRoleArn": "arn:aws:iam::566474062827:role/data-review-apprunner-instance"
+  },
+  "HealthCheckConfiguration": {
+    "Protocol": "HTTP",
+    "Path": "/",
+    "Interval": 10,
+    "Timeout": 5,
+    "HealthyThreshold": 1,
+    "UnhealthyThreshold": 5
+  }
+}

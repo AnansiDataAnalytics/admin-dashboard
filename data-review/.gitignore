@@ -21,3 +21,6 @@ snapshots/
 # always-on supervisor logs (autoserve.sh / launchd agent)
 autoserve.log
 autoserve.out
+
+# local-dev data-root pointer (machine-specific; prod sets DATA_REVIEW_DATA_ROOT instead)
+.data_root

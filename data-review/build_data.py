@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 import json
 import math
+import os
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -20,8 +21,21 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-GMD_ROOT = Path(__file__).resolve().parents[1]
-FINAL_DIR = GMD_ROOT / "data" / "final"
+# Input data root (a GMD/WED checkout). Resolution order: DATA_REVIEW_DATA_ROOT env
+# → a gitignored `.data_root` file next to this script (one line = the path; local-dev
+# convenience) → parents[1] (an in-repo checkout). In production the env var points at
+# the S3-synced scratch dir. Outputs (data.json, snapshots) always stay next to this script.
+def _resolve_data_root() -> Path:
+    env = os.environ.get("DATA_REVIEW_DATA_ROOT")
+    if env:
+        return Path(env).resolve()
+    local = Path(__file__).resolve().parent / ".data_root"
+    if local.exists():
+        return Path(local.read_text().strip()).resolve()
+    return Path(__file__).resolve().parents[1]
+
+DATA_ROOT = _resolve_data_root()
+FINAL_DIR = DATA_ROOT / "data" / "final"
 FLAGS_PATH = Path(__file__).parent / "flags.parquet"
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
 OUT = Path(__file__).parent / "data.json"

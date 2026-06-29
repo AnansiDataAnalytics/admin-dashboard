@@ -33,6 +33,7 @@ import datetime as _dt
 import hashlib
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -42,14 +43,27 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-REPO = Path(__file__).resolve().parents[1]
-DATA_HELPER = REPO / "data" / "helpers"
-DATA_FINAL = REPO / "data" / "final"
-DATA_DISTR = REPO / "data" / "distribute"
-OUT_PARQUET = REPO / "audit_dashboard" / "flags.parquet"
-RAW_PARQUET = REPO / "audit_dashboard" / "flags_raw.parquet"  # pre-suppression cache
+SCRIPT_DIR = Path(__file__).resolve().parent          # outputs live next to the app (data-review/)
+# Inputs come from a configurable data root (a GMD/WED checkout's data/ tree).
+# Resolution order: DATA_REVIEW_DATA_ROOT env → a gitignored `.data_root` file next
+# to this script (local-dev convenience) → parents[1] (an in-repo checkout).
+def _resolve_data_root() -> Path:
+    env = os.environ.get("DATA_REVIEW_DATA_ROOT")
+    if env:
+        return Path(env).resolve()
+    local = SCRIPT_DIR / ".data_root"
+    if local.exists():
+        return Path(local.read_text().strip()).resolve()
+    return Path(__file__).resolve().parents[1]
+
+DATA_ROOT = _resolve_data_root()
+DATA_HELPER = DATA_ROOT / "data" / "helpers"
+DATA_FINAL = DATA_ROOT / "data" / "final"
+DATA_DISTR = DATA_ROOT / "data" / "distribute"
+OUT_PARQUET = SCRIPT_DIR / "flags.parquet"
+RAW_PARQUET = SCRIPT_DIR / "flags_raw.parquet"  # pre-suppression cache
 OUT_DTA = DATA_HELPER / "master_check.dta"
-OUT_MANIFEST = REPO / "audit_dashboard" / "flags_manifest.json"
+OUT_MANIFEST = SCRIPT_DIR / "flags_manifest.json"
 
 # ---------------------------------------------------------------------------
 # Thresholds (verbatim from error_checking.do:25-28 + gmd_check.ado)
@@ -895,7 +909,7 @@ def build_all() -> pd.DataFrame:
     ]
 
 
-SNAPSHOT_DIR = REPO / "audit_dashboard" / "snapshots"
+SNAPSHOT_DIR = SCRIPT_DIR / "snapshots"
 SNAPSHOT_MIN_DAYS = 6     # don't snapshot more often than ~weekly
 SNAPSHOT_KEEP = 16        # prune older than the last N snapshots
 
@@ -955,7 +969,7 @@ def write_manifest(vars_: list[str]) -> None:
     manifest = {
         "generated_at": _dt.datetime.now().isoformat(timespec="seconds"),
         "engine_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-        "inputs": {str(p.relative_to(REPO)): _fingerprint(p) for p in inputs},
+        "inputs": {str(p.relative_to(DATA_ROOT)): _fingerprint(p) for p in inputs},
     }
     OUT_MANIFEST.write_text(json.dumps(manifest, indent=2, sort_keys=True))
     print(f"Wrote {OUT_MANIFEST}")

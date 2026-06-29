@@ -221,6 +221,70 @@ def _apply(conn: sqlite3.Connection, rec: dict, *, line_no: int) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# MongoDB (Atlas) backend -- used when MONGODB_URI is set (deployment). The
+# collection is the source of truth; same append/active_vettings semantics as
+# the file path (per-key rev counter + supersede + value-keying). Writes ONLY
+# to its own DB (DATA_REVIEW_DB, default 'data_review') -- never the WED
+# series/seriesdatas collections.
+# ---------------------------------------------------------------------------
+MONGODB_URI = os.environ.get("MONGODB_URI")
+USE_MONGO = bool(MONGODB_URI)
+MONGO_DB_NAME = os.environ.get("DATA_REVIEW_DB", "data_review")
+MONGO_COLL_NAME = os.environ.get("DATA_REVIEW_VETTINGS_COLL", "vettings")
+_MONGO_COLL = None
+
+_MONGO_FIELDS = ("iso3", "year", "variable", "source", "reason_type", "status",
+                 "justification", "source_evidence", "refs", "approved_by",
+                 "approved_at", "expires_at", "rev", "value")
+
+
+def _mongo_coll():
+    global _MONGO_COLL
+    if _MONGO_COLL is None:
+        import pymongo
+        client = pymongo.MongoClient(MONGODB_URI, appname="data-review")
+        coll = client[MONGO_DB_NAME][MONGO_COLL_NAME]
+        coll.create_index([("iso3", 1), ("variable", 1), ("year", 1),
+                           ("source", 1), ("reason_type", 1), ("superseded_by", 1)])
+        _MONGO_COLL = coll
+    return _MONGO_COLL
+
+
+def _mongo_apply(rec: dict) -> None:
+    """Mirror _apply() against Mongo: revoke tombstones the active row for the
+    key; vet/edit supersedes prior active rows and inserts a new one at rev+1."""
+    coll = _mongo_coll()
+    op = rec.get("op", "vet")
+    body = rec["body"]
+    key = {"iso3": body["iso3"], "year": body.get("year"), "variable": body["variable"],
+           "source": body.get("source"), "reason_type": body["reason_type"]}
+    if op == "revoke":
+        coll.update_many({**key, "superseded_by": None}, {"$set": {"superseded_by": -1}})
+        return
+    prev = coll.find_one(dict(key), sort=[("rev", -1)])
+    next_rev = ((prev or {}).get("rev") or 0) + 1
+    coll.update_many({**key, "superseded_by": None}, {"$set": {"superseded_by": -2}})
+    coll.insert_one({
+        **key,
+        "status": body["status"], "justification": body["justification"],
+        "source_evidence": body.get("source_evidence"), "refs": body.get("refs"),
+        "approved_by": body["approved_by"],
+        "approved_at": body.get("approved_at", rec.get("at_ts", _now_iso())),
+        "expires_at": body.get("expires_at"), "superseded_by": None,
+        "rev": next_rev, "value": body.get("value"),
+        "at_ts": rec.get("at_ts"), "by_user": rec.get("by_user"),
+    })
+
+
+def _mongo_active() -> list[dict]:
+    coll = _mongo_coll()
+    now = _now_iso()
+    cur = coll.find({"superseded_by": None,
+                     "$or": [{"expires_at": None}, {"expires_at": {"$gt": now}}]})
+    return [{k: d.get(k) for k in _MONGO_FIELDS} for d in cur]
+
+
 def append(op: str, body: dict, *, by_user: str | None = None) -> None:
     """Append a record to vetting.jsonl AND update audit.db atomically
     enough for the single-writer dashboard. Raises ValueError on a bad
@@ -254,6 +318,10 @@ def append(op: str, body: dict, *, by_user: str | None = None) -> None:
     }
     # Serialize the JSONL append + DB read-modify-write so concurrent
     # requests can't race on the per-cell rev counter.
+    if USE_MONGO:
+        with _WRITE_LOCK:
+            _mongo_apply(rec)
+        return
     with _WRITE_LOCK:
         JSONL_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(JSONL_PATH, "a") as f:
@@ -271,6 +339,8 @@ def append(op: str, body: dict, *, by_user: str | None = None) -> None:
 
 def active_vettings() -> list[dict]:
     """Return every currently-active (not superseded, not expired) record."""
+    if USE_MONGO:
+        return _mongo_active()
     conn = open_db()
     now = _now_iso()
     cur = conn.execute(

@@ -26,3 +26,6 @@ autoserve.out
 
 # local-dev data-root pointer (machine-specific; prod sets DATA_REVIEW_DATA_ROOT instead)
 .data_root
+
+# scratch data root synced from S3 by fetch_inputs.py
+_scratch/

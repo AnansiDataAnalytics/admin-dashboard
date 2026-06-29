@@ -248,6 +248,15 @@ reimplementing delta primitives.
 
 ---
 
+## Deferred / known to-dos
+
+- **Sleep-countdown banner UX** (`DataReviewFrame`): the asleep-card + auto-recover are done
+  and the `/idle` backend is verified, but the "sleeps in X" banner + Stay-active keepalive
+  are deferred/unverified — the 15s poll is too coarse to show within a short test window
+  (fine at the 1h prod timeout). Revisit the banner cadence/threshold during UI polish.
+
+---
+
 ## 7. Sequencing
 
 1. **Phase 1** — embed GMD local (page + rewrite + nav + fallback + guardrails). ✅ DONE.

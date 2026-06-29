@@ -1,11 +1,30 @@
 # Data Review — Integration Plan
 
-**Goal:** embed the existing GMD/WED **data-review app** (a self-contained Python
-`serve.py` + `index.html` + Plotly, in `Global-Macro-Database-Internal/audit_dashboard/`)
-into the admin dashboard's **Data Review** page, as-is, then make its input source
+**Goal:** embed the **data-review app** (a self-contained Python `serve.py` + `index.html`
++ Plotly) into the admin dashboard's **Data Review** page, as-is, then make its input source
 selectable (local file / upload / cloud WED).
 
+**Code location:** the app now lives in **`admin-dashboard/data-review/`** (the canonical
+copy). It was transferred from the now-grandfathered `Global-Macro-Database-Internal/audit_dashboard/`,
+which is **frozen/legacy — do not edit it**.
+
 This is the consolidated, decided plan. It supersedes the exploratory notes.
+
+---
+
+## Status (2026-06-29)
+
+- **Phase 1 (embed, local GMD data): DONE** — branch `data-review-embed` (commits `20489fe`
+  feat + `0bf2aae` docs; based on `auth`; not pushed).
+- **App code transferred** GMD `audit_dashboard/` → `admin-dashboard/data-review/`
+  (commit `7a585af`). Code only: excludes the 32 MB GMD `vetting.jsonl` (data; moving to
+  Atlas) and generated artifacts.
+- **Not yet runnable from `data-review/`** — the scripts still resolve GMD-relative paths
+  (`parents[1]` → `data/final`, `data/distribute`, `data/helpers`) and `index.html` hardcodes
+  the GMD issues repo. Making it run from this location is the first slice of Phase 2.
+- **Interim:** local dev still runs `serve.py` from the GMD `audit_dashboard/` copy until the
+  Phase 2 data-root refactor lands.
+- **Next:** Phase 2 — input-flexibility refactor (in `data-review/`).
 
 ---
 
@@ -29,7 +48,7 @@ This is the consolidated, decided plan. It supersedes the exploratory notes.
 ```
 PROVIDERS → EC2 (Stata pipeline: download→clean→merge→combine→output_data)
                        │  (green build)
-                       ├─► build step (build_data.py + flags.py)  ← NEW, rides the run
+                       ├─► build step (data-review/build_data.py + flags.py)  ← rides the run
                        │        emits data.json + flags.parquet  →  S3 review/<version>/
                        ├─► S3 wed-output-ap1  (final/, clean/, manifests/)
                        └─► MongoDB Atlas (wed_staging / wed_v0)
@@ -40,7 +59,7 @@ Browser ──► Next.js (Render)  ──proxy /data-review-app/*──►  ser
                                                                └─ reads/writes vetting → Atlas (own collection)
 ```
 
-Two runtime jobs, deliberately separated:
+Two runtime jobs, deliberately separated (both are scripts in `data-review/`):
 
 - **Build step** — `build_data.py` + `flags.py`. Heavy (pandas, tens of seconds–minutes),
   **occasional** (per release / per upload). Runs on the EC2 right after `output_data`,
@@ -50,71 +69,69 @@ Two runtime jobs, deliberately separated:
   embed, so it barely touches pandas). Pulls the prebuilt artifacts + serves the UI +
   records vetting. Hosted on Fargate/App Runner with an IAM role → free same-region S3/Atlas.
 
+### What the build step reads today (GMD defaults)
+With no input override (the CP0 run), paths derive from the repo root and read:
+- **`build_data.py`** → the **variable-specific `data/final/chainlinked_<var>.dta`** files
+  (all 76); for each it pulls every per-source `<SOURCE>_<var>` column + the spliced `<var>`.
+- **`flags.py`** → **both**: each `data/final/chainlinked_<var>.dta` (per-variable + the new
+  lvl10/break checks) **and** the merged `data/distribute/GMD.dta` (cross-variable identity
+  checks), plus `data/helpers/variables.csv` and `data/helpers/country_gdp_shares.csv`.
+
+For WED (Phase 2) the per-source input becomes `clean_data_wide.dta` and the merged input
+becomes `data_final.dta` (the WED analog of `GMD.dta`) — see §3.2.
+
 ---
 
-## 2. Phase 1 — Embed the app (GMD, local) — ready to build
+## 2. Phase 1 — Embed the app (GMD, local) — DONE
 
-Self-contained; unblocked today (GMD's 76 `chainlinked_*.dta` + `data/distribute/GMD.dta`
-exist locally). Verified facts: every `index.html` fetch is **relative**; `serve.py` sets
-**no** `X-Frame-Options`/CSP/CORS; the dashboard sets none either → iframing is unblocked.
+Self-contained; unblocked (GMD's 76 `chainlinked_*.dta` + `data/distribute/GMD.dta` exist
+locally). Verified: every `index.html` fetch is **relative**; `serve.py` sets **no**
+`X-Frame-Options`/CSP/CORS; the dashboard sets none either → iframing is unblocked.
 
-**Frontend — replace the stub** `frontend/src/app/data-review/page.jsx`:
-```jsx
-export const metadata = { title: "Data Review · Anansi Admin" };
-export default function DataReviewPage() {
-  return (
-    <iframe src="/data-review-app/" title="Data Review"
-      style={{ width: "100%", height: "calc(100vh - 60px)", border: 0 }} />
-  );
-}
-```
-`calc(100vh - 60px)` clears the 60px sticky `.anav`; **not** wrapped in `.apage` (its
-1120px max-width would letterbox the app). Stays a server component.
+**As built (5 frontend files):**
+- `frontend/src/app/data-review/page.jsx` — server component that renders the client
+  `<DataReviewFrame/>` (kept a server component so it can export `metadata`).
+- `frontend/src/components/DataReviewFrame.jsx` — `'use client'`; renders a full-bleed iframe
+  at `src="/data-review-app/"` (`height: calc(100vh - 60px)` to clear the 60px sticky
+  `.anav`, **not** wrapped in `.apage`), and probes the proxy in the background — if the
+  sidecar is unreachable it swaps to a dashboard-native "offline" card.
+- `frontend/next.config.js` — the **loaded** config (Next ignores `next.config.mjs`). Adds
+  `async rewrites()` with `/data-review-app/:path* → DATA_REVIEW_TARGET` (default
+  `http://127.0.0.1:8765`) and preserves the dormant `/api → BACKEND_PROXY_TARGET` proxy.
+  Sets **`skipTrailingSlashRedirect: true`** so the app's relative fetches resolve under the
+  `/data-review-app/` prefix (the trailing slash must survive). Always link with the slash.
+- `frontend/src/components/Nav.jsx` — `/data-review` flipped to `ready: true`.
+- `frontend/src/app/page.jsx` — home tile "Planned" → "Live"; live-services counter 1 → 2.
 
-**Rewrite — `frontend/next.config.js`** (the *loaded* config — `next.config.mjs` is
-**dead code**, Next loads only the first of `[next.config.js, next.config.mjs]`; **merge or
-delete `.mjs`** so it can't mislead a future maintainer):
-```js
-const PY = process.env.DATA_REVIEW_TARGET || "http://127.0.0.1:8765";
-module.exports = {
-  reactStrictMode: true,
-  async rewrites() {
-    return [{ source: "/data-review-app/:path*", destination: `${PY}/:path*` }];
-  },
-};
-```
-All app fetches are relative → they resolve under `/data-review-app/` with **zero edits to
-the app**.
+`next.config.mjs` is **dead code** (Next loads only the first of `[next.config.js,
+next.config.mjs]`); it's left untracked — delete it so it can't mislead a future maintainer.
 
-**Nav** — flip the `/data-review` entry in `frontend/src/components/Nav.jsx` `LINKS` from
-`ready:false` → `ready:true` (and the "Planned" home-page tile).
-
-**Fallback** — add `frontend/src/app/data-review/error.jsx` so a down sidecar shows
-"Data Review is offline," not a blank frame (the route has no error/loading boundary today).
-
-**Run (local dev):**
+**Run (local dev — interim, from the GMD copy until Phase 2):**
 ```bash
-python audit_dashboard/build_data.py     # -> data.json    (build outputs are NOT on disk yet)
-python audit_dashboard/flags.py          # -> flags.parquet
+# in the GMD repo (Global-Macro-Database-Internal); data/final + data/distribute live there
+python audit_dashboard/flags.py          # -> flags.parquet   (run first)
+python audit_dashboard/build_data.py     # -> data.json
 python audit_dashboard/serve.py 8765     # supervised; SIGTERM-with-grace, never SIGKILL
 ```
+The Next dev server proxies `/data-review-app/*` to `DATA_REVIEW_TARGET` (default `:8765`).
 Ignore `autoserve.sh` / `install_macos.sh` / the launchd plist — macOS-only.
 
-**Guardrails (mandatory):** deny `/data-review-app/{sync,regen,resuppress}` at the rewrite
-(or run `serve.py` with no git credentials on a throwaway branch). These endpoints run live
-`git push` / `fetch/rebase` and spawn a ~30-min `flags.py` subprocess; they must not be
-reachable from the embed.
+**Guardrails (mandatory):** deny `/data-review-app/{sync,regen,resuppress}` (or run `serve.py`
+with no git credentials on a throwaway branch). Those endpoints run live `git push` /
+`fetch/rebase` and spawn a ~30-min `flags.py` subprocess; they must not be reachable from the
+embed. (Phase 1 local note: simply don't click Sync/Regenerate.)
 
-**Exit criteria:** Data Review page renders the GMD app full-bleed under the dashboard
-chrome; review/approve/comment works; the dangerous endpoints are unreachable.
+**Result:** Data Review page renders the app full-bleed under the dashboard chrome; nav
+promoted; graceful offline state; frontend is deploy-ready via the `DATA_REVIEW_TARGET` env.
 
 ---
 
-## 3. Phase 2 — Input flexibility (immediately after) + cloud WED + A/Q/M
+## 3. Phase 2 — Input flexibility (next) + cloud WED + A/Q/M
 
-The cloud refactor is a **path-swap, not a parser rewrite** — the cloud `.dta` schema is
-identical to local (handoff §9). All three input sources converge on "land `.dta` in a
-per-dataset scratch dir → run the build step → serve."
+All work happens in **`admin-dashboard/data-review/`**. The cloud refactor is a **path-swap,
+not a parser rewrite** — the cloud `.dta` schema is identical to local (handoff §9). All
+three input sources converge on "land `.dta` in a per-dataset scratch dir → run the build
+step → serve."
 
 ### 3.1 Dataset registry + input resolvers
 A small config lists named datasets; each resolves to a local scratch dir of `.dta` via one of:
@@ -127,15 +144,17 @@ A small config lists named datasets; each resolves to a local scratch dir of `.d
 The app's purpose is per-source comparison, so it must read the **unmasked** artifacts:
 - **Per-source review:** `clean_data_wide.dta` (all variables × all sources, source-prefixed;
   the handoff's recommended per-source input, and what WED's own prior dashboard used).
-- **Cross-variable checks:** `data_final.dta` (merged, unprefixed canonical names) — this is
-  WED's analog of GMD's `data/distribute/GMD.dta`.
+- **Cross-variable checks:** `data_final.dta` (merged, unprefixed canonical names) — WED's
+  analog of GMD's `data/distribute/GMD.dta`.
 - **Never** use Mongo or the `*_masked.dta` twins — they collapse proprietary sources to
   `"Anansi estimate"` and would gut the cross-source review. (This is why embedding depends
   on dashboard auth being enforced — see §5.)
 
-### 3.3 Refactor `build_data.py` + `flags.py`
+### 3.3 Refactor `data-review/build_data.py` + `data-review/flags.py`
 - Replace the hardcoded `REPO = parents[1]` path derivation with a **data-root / dataset
   config** (input root, merged-file name, output + state location).
+- **De-couple from GMD:** also fix `index.html`'s hardcoded `GH_REPO` (issue links) and the
+  GMD-relative output paths in `build_audit_log.py` / `scrape_gdp_shares.py`.
 - **A/Q/M dimension:** WED keys rows by a **string `yearmonth`** (`"2020"`, `"2020-Q1"`,
   `"2020-01"`) + **`freq` ∈ {A,Q,M}**, with the three frequencies as **independent rows**.
   The review unit becomes **(ISO3, variable, freq)**; the flag engine, the chart/table, and
@@ -147,12 +166,13 @@ The app's purpose is per-source comparison, so it must read the **unmasked** art
 - Filter out published `.keep` markers; respect Linux case-sensitivity on source/column names.
 
 ### 3.4 Serve step on Fargate/App Runner (ap-southeast-1)
-- Containerize `serve.py`; attach an **IAM task role** (S3 read on `wed-output-ap1`, Atlas
-  access) — no long-lived keys, same posture as the GH Actions OIDC.
+- Containerize `data-review/serve.py`; attach an **IAM task role** (S3 read on
+  `wed-output-ap1`, Atlas access) — no long-lived keys, same posture as the GH Actions OIDC.
+  Make the bind host an env var (default `127.0.0.1` local, `0.0.0.0` in the container).
 - **Dataset-scoped:** serve under `/<dataset>/…` so the Next rewrite can target
   `/data-review-app/<dataset>/*`; each dataset has its own built artifacts + vetting scope.
 - `/regen` stays disabled (build rides the pipeline); `/sync` removed (vetting goes to Mongo,
-  not git).
+  not git); drop the SIGINT git-commit behavior.
 
 ### 3.5 Vetting → own Mongo collection (Atlas)
 - Move vetting off local `vetting.jsonl` + SQLite into **our own collection** in the same
@@ -173,7 +193,7 @@ The app's purpose is per-source comparison, so it must read the **unmasked** art
 
 **Exit criteria:** a reviewer can pick GMD / WED / an uploaded dataset; WED loads unmasked
 A/Q/M data from S3 (version-pinned); vetting persists to Atlas, attributed to the logged-in
-user, isolated per dataset.
+user, isolated per dataset; the GMD `audit_dashboard/` copy can then be deleted.
 
 ---
 
@@ -218,11 +238,13 @@ reimplementing delta primitives.
 
 ## 7. Sequencing
 
-1. **Phase 1** — embed GMD local (page + rewrite + nav + fallback + guardrails). Smallest,
-   unblocked.
-2. **Phase 2a** — refactor `build_data.py`/`flags.py` for data-root config + **A/Q/M**.
-3. **Phase 2b** — S3 input resolver + version pinning; build step on the EC2 → S3.
-4. **Phase 2c** — Fargate serve + IAM role; Next rewrite → Fargate; dataset-scoped routes.
-5. **Phase 2d** — vetting → Atlas collection + per-session reviewer identity.
-6. **Phase 2e** — selector + upload UI.
-7. **Phase 3** — (later) wire the promotion gate.
+1. **Phase 1** — embed GMD local (page + rewrite + nav + fallback + guardrails). ✅ DONE.
+2. **App transfer** — GMD `audit_dashboard/` → `admin-dashboard/data-review/`. ✅ DONE.
+3. **Phase 2a** — refactor `data-review/build_data.py`/`flags.py` for data-root config +
+   **A/Q/M**; de-couple GMD paths/`GH_REPO`. Makes the app runnable from `data-review/`.
+4. **Phase 2b** — S3 input resolver + version pinning; build step on the EC2 → S3.
+5. **Phase 2c** — Fargate serve + IAM role; Next rewrite → Fargate; dataset-scoped routes.
+6. **Phase 2d** — vetting → Atlas collection + per-session reviewer identity.
+7. **Phase 2e** — selector + upload UI.
+8. **Cleanup** — delete the GMD `audit_dashboard/` copy once `data-review/` is validated.
+9. **Phase 3** — (later) wire the promotion gate.

@@ -655,11 +655,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
-    def handle_one_request(self) -> None:
-        # Stamp every request so the idle watchdog can scale the server to zero.
+    def _mark_active(self) -> None:
+        # Count this request as activity for the idle watchdog -- EXCEPT the /idle
+        # status poll, which the dashboard hits continuously to show the sleep
+        # countdown and must not keep the server awake.
         global _LAST_REQUEST_AT
-        _LAST_REQUEST_AT = time.monotonic()
-        super().handle_one_request()
+        if urlparse(self.path).path != "/idle":
+            _LAST_REQUEST_AT = time.monotonic()
 
     def log_message(self, fmt: str, *args) -> None:  # quieter logs
         # Always coerce args to str — http.server occasionally passes
@@ -704,6 +706,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
+        self._mark_active()
+        # /idle — idle status for the dashboard's sleep-countdown banner. Exempt
+        # from activity (see _mark_active) so polling it never resets the timer.
+        if path == "/idle":
+            idle = time.monotonic() - _LAST_REQUEST_AT
+            self._send_json(200, {
+                "timeout": IDLE_TIMEOUT,
+                "idle_seconds": round(idle, 1),
+                "seconds_left": round(max(0.0, IDLE_TIMEOUT - idle), 1) if IDLE_TIMEOUT else None,
+            })
+            return
         # /reviewer — current handle + this-week throughput.
         if path == "/reviewer":
             r = get_reviewer()
@@ -812,6 +825,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
+        self._mark_active()
         # Embed: the git-mutating + heavy-rebuild endpoints are disabled (build/sync
         # happen in the pipeline, not from the browser-facing app).
         if EMBED_MODE and self.path in ("/sync", "/regen", "/resuppress"):
@@ -915,6 +929,14 @@ def _idle_watchdog(httpd) -> None:
 
 
 def main(argv: list[str]) -> int:
+    # Windows consoles / redirected stdout often default to cp1252, which can't
+    # encode the arrow + emoji in the banners below (crashes on launch when piped
+    # or written to container logs). Force utf-8, best-effort.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     port = 8765
     if len(argv) > 1:
         # Tolerate stray punctuation/whitespace around the port (e.g. a
@@ -939,8 +961,10 @@ def main(argv: list[str]) -> int:
         print(f"  backups:   {BACKUP_DIR}/")
         print(f"  Ctrl+C to stop.")
         if IDLE_TIMEOUT:
-            print(f"  idle self-stop after {IDLE_TIMEOUT}s of no requests")
+            print(f"  idle self-stop: after {IDLE_TIMEOUT}s of no requests")
             threading.Thread(target=_idle_watchdog, args=(httpd,), daemon=True).start()
+        else:
+            print(f"  idle self-stop: disabled (set DATA_REVIEW_IDLE_TIMEOUT to enable)")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

@@ -25,7 +25,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-HELPER_FILES = ("variables.csv", "country_gdp_shares.csv")
+REQUIRED_HELPERS = ("variables.csv",)
+OPTIONAL_HELPERS = ("country_gdp_shares.csv",)  # flags.py skips the share check if absent
 
 
 def _run(cmd: list[str]) -> None:
@@ -51,9 +52,15 @@ def fetch(chainlinked_uri: str, gmd_uri: str, helpers_uri: str,
     # GMD.dta -> data/distribute/GMD.dta  (gmd_uri may be a full key or a dir)
     gmd_key = gmd_uri if gmd_uri.endswith(".dta") else _as_dir(gmd_uri) + "GMD.dta"
     _run(["aws", "s3", "cp", gmd_key, str(distribute / "GMD.dta"), *reg])
-    # only the two helper CSVs flags.py needs -> data/helpers/
-    for name in HELPER_FILES:
+    # required helper CSV -> data/helpers/
+    for name in REQUIRED_HELPERS:
         _run(["aws", "s3", "cp", _as_dir(helpers_uri) + name, str(helpers / name), *reg])
+    # optional helpers: skip cleanly if absent (flags.py tolerates their absence)
+    for name in OPTIONAL_HELPERS:
+        try:
+            _run(["aws", "s3", "cp", _as_dir(helpers_uri) + name, str(helpers / name), *reg])
+        except subprocess.CalledProcessError:
+            print(f"[fetch] optional helper {name} not found in {helpers_uri} -- skipping")
     return dest
 
 

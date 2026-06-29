@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
@@ -78,6 +79,12 @@ EMBED_MODE = os.environ.get("DATA_REVIEW_EMBED", "1") != "0"
 # When True, regenerate docs/GMD_AUDIT_LOG.md after every successful save. Off in
 # embedded mode (those docs live in the grandfathered GMD repo, not here).
 AUTO_REBUILD_AUDIT_LOG = not EMBED_MODE
+
+# Idle self-stop: exit after this many seconds with no HTTP request (so an
+# on-demand Fargate task scales to zero). 0 = disabled (the local-dev default);
+# production sets DATA_REVIEW_IDLE_TIMEOUT=3600 (1h).
+IDLE_TIMEOUT = int(os.environ.get("DATA_REVIEW_IDLE_TIMEOUT", "0") or "0")
+_LAST_REQUEST_AT = time.monotonic()
 
 if not COMMENTS_PATH.exists():
     COMMENTS_PATH.write_text("{}")
@@ -648,6 +655,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
+    def handle_one_request(self) -> None:
+        # Stamp every request so the idle watchdog can scale the server to zero.
+        global _LAST_REQUEST_AT
+        _LAST_REQUEST_AT = time.monotonic()
+        super().handle_one_request()
+
     def log_message(self, fmt: str, *args) -> None:  # quieter logs
         # Always coerce args to str — http.server occasionally passes
         # HTTPStatus enums or ints, which aren't iterable for `in` checks.
@@ -887,6 +900,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self._send_json(200, {"ok": True, "ts": entry["ts"], "fanout": n_fanout})
 
 
+def _idle_watchdog(httpd) -> None:
+    """Stop the server after IDLE_TIMEOUT seconds with no HTTP request, so an
+    on-demand task can scale to zero. Runs in a daemon thread; httpd.shutdown()
+    cleanly unblocks serve_forever() in main()."""
+    interval = max(5, min(60, IDLE_TIMEOUT // 4))
+    while True:
+        time.sleep(interval)
+        idle = time.monotonic() - _LAST_REQUEST_AT
+        if idle >= IDLE_TIMEOUT:
+            print(f"\nidle for {idle:.0f}s (>= {IDLE_TIMEOUT}s) — stopping server")
+            httpd.shutdown()
+            return
+
+
 def main(argv: list[str]) -> int:
     port = 8765
     if len(argv) > 1:
@@ -911,6 +938,9 @@ def main(argv: list[str]) -> int:
         print(f"  log:       {LOG_PATH}")
         print(f"  backups:   {BACKUP_DIR}/")
         print(f"  Ctrl+C to stop.")
+        if IDLE_TIMEOUT:
+            print(f"  idle self-stop after {IDLE_TIMEOUT}s of no requests")
+            threading.Thread(target=_idle_watchdog, args=(httpd,), daemon=True).start()
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

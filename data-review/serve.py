@@ -952,10 +952,13 @@ def main(argv: list[str]) -> int:
         print("⚠️  data.json not found. Run `python build_data.py` first.")
         # still serve so user can see the error message in browser
 
+    # Bind host: 127.0.0.1 for local dev; a container sets DATA_REVIEW_BIND=0.0.0.0
+    # so the platform/ALB can route to it.
+    host = os.environ.get("DATA_REVIEW_BIND", "127.0.0.1")
     socketserver.ThreadingTCPServer.allow_reuse_address = True
-    with socketserver.ThreadingTCPServer(("127.0.0.1", port), Handler) as httpd:
+    with socketserver.ThreadingTCPServer((host, port), Handler) as httpd:
         print(f"Data quality review")
-        print(f"  → http://127.0.0.1:{port}/")
+        print(f"  → http://{host}:{port}/")
         print(f"  comments:  {COMMENTS_PATH}")
         print(f"  log:       {LOG_PATH}")
         print(f"  backups:   {BACKUP_DIR}/")

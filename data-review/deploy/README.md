@@ -10,6 +10,7 @@ Live resources (region `ap-southeast-1`, account `566474062827`):
 | IAM access role (ECR pull) | `data-review-apprunner-access` |
 | IAM instance role (S3 + SSM/KMS) | `data-review-apprunner-instance` |
 | Mongo URI (SecureString) | SSM `/mongodb/data-review/uri` = cluster base URI + `/data_review` |
+| **Bake data source** | `s3://error-review/` — `final/` (77 chainlinked + `GMD.dta`) + `helpers/variables.csv`. **No `country_gdp_shares.csv`** there, so the world-GDP `share` check is skipped. Includes the `rHPI` variable. (Switch sources by re-running the build below against another bucket.) |
 
 The image is **self-contained + baked**: `data.json` + `flags.parquet` are built from S3
 and baked in, so the container **serves instantly** (reliable App Runner health check).

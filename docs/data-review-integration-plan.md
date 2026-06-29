@@ -38,8 +38,8 @@ This is the consolidated, decided plan. It supersedes the exploratory notes.
 | 4 | Auth | **Assumed to exist** (being built in parallel); embedding unmasked data depends on it |
 | 5 | Engagement scope | **Pattern A** (file-based review) now, designed **Pattern-B-ready** (release-gate later) |
 | 6 | Build step | **Rides the WED pipeline** on the existing EC2 (data is already on the box) |
-| 7 | Serve step | **Fargate / App Runner in ap-southeast-1** (IAM task role, no long-lived keys) |
-| 8 | Vetting store | **Own Mongo collection in Atlas**, keyed by `release_version` |
+| 7 | Serve step | **On-demand Fargate task** in ap-southeast-1 (scale-to-zero; IAM task role). Started from a dashboard control; **idle self-stop after ~1h**. Not always-on (usage <10 h/week). |
+| 8 | Vetting / ledger | **Named, durable ledger** (own Atlas collection), **reusable across data versions** — build on prior approvals, don't re-fix cleared errors. |
 
 ---
 
@@ -65,7 +65,7 @@ Two runtime jobs, deliberately separated (both are scripts in `data-review/`):
   **occasional** (per release / per upload). Runs on the EC2 right after `output_data`,
   publishing `data.json` + `flags.parquet` to S3 alongside the products. No separate S3
   fetch, no egress, version-pinned for free.
-- **Serve step** — `serve.py`. **Always-on**, very light (stdlib; `/regen` disabled in the
+- **Serve step** — `serve.py`. **On-demand** (scale-to-zero; dashboard-started, ~1h idle stop), very light (stdlib; `/regen` disabled in the
   embed, so it barely touches pandas). Pulls the prebuilt artifacts + serves the UI +
   records vetting. Hosted on Fargate/App Runner with an IAM role → free same-region S3/Atlas.
 
@@ -137,15 +137,16 @@ step → serve."
 A small config lists named datasets; each resolves to a local scratch dir of `.dta` via one of:
 - **local path** (GMD today),
 - **upload** (user-supplied file, see §3.5),
-- **S3** — `aws s3 cp` / boto3 from `wed-output-ap1`, **version-pinned** via
-  `manifests/<version>.json` (fetch each key at its `VersionId`). Record `version`/`git_sha`.
+- **S3** — the user supplies an S3 location holding the `chainlinked_*.dta` + `GMD.dta`;
+  `aws s3 cp` / boto3 → scratch dir, then build. Optionally version-pin via a manifest
+  `VersionId`; record `version`/`git_sha` on each decision for reproducibility.
 
 ### 3.2 Canonical inputs — UNMASKED (critical)
 The app's purpose is per-source comparison, so it must read the **unmasked** artifacts:
-- **Per-source review:** `clean_data_wide.dta` (all variables × all sources, source-prefixed;
-  the handoff's recommended per-source input, and what WED's own prior dashboard used).
-- **Cross-variable checks:** `data_final.dta` (merged, unprefixed canonical names) — WED's
-  analog of GMD's `data/distribute/GMD.dta`.
+- **Per-source review:** the **unmasked `chainlinked_<var>.dta`** (the existing ingestion —
+  NOT the `*_masked.dta` twins). `clean_data_wide.dta` is an optional later consolidation,
+  not required (see §6).
+- **Cross-variable checks:** `GMD.dta` / `data_final.dta` (merged, unprefixed canonical names).
 - **Never** use Mongo or the `*_masked.dta` twins — they collapse proprietary sources to
   `"Anansi estimate"` and would gut the cross-source review. (This is why embedding depends
   on dashboard auth being enforced — see §5.)
@@ -165,18 +166,29 @@ The app's purpose is per-source comparison, so it must read the **unmasked** art
   see §6.)
 - Filter out published `.keep` markers; respect Linux case-sensitivity on source/column names.
 
-### 3.4 Serve step on Fargate/App Runner (ap-southeast-1)
-- Containerize `data-review/serve.py`; attach an **IAM task role** (S3 read on
-  `wed-output-ap1`, Atlas access) — no long-lived keys, same posture as the GH Actions OIDC.
-  Make the bind host an env var (default `127.0.0.1` local, `0.0.0.0` in the container).
-- **Dataset-scoped:** serve under `/<dataset>/…` so the Next rewrite can target
-  `/data-review-app/<dataset>/*`; each dataset has its own built artifacts + vetting scope.
-- `/regen` stays disabled (build rides the pipeline); `/sync` removed (vetting goes to Mongo,
-  not git); drop the SIGINT git-commit behavior.
+### 3.4 Serve step — on-demand Fargate task (scale-to-zero), NOT always-on
+Usage is <10 h/week, so an always-on server is overkill. Instead:
+- Containerize `data-review/serve.py`; **IAM task role** (S3 read, Atlas access) — no
+  long-lived keys, same posture as the GH Actions OIDC. Bind host is an env var
+  (`127.0.0.1` local, `0.0.0.0` in the container).
+- **On-demand start:** a dashboard control hits the Express backend, which starts the
+  Fargate task (ECS `run_task` / set `desiredCount=1`). It sits behind a **stable ALB / Cloud
+  Map URL** so `DATA_REVIEW_TARGET` never changes; the dashboard polls readiness, then loads
+  the iframe.
+- **Idle self-stop:** `serve.py` tracks last-request time; after **~1h idle** the task stops
+  (scale-to-zero → no compute cost). Configurable via `DATA_REVIEW_IDLE_TIMEOUT`.
+- **Already isolated:** `EMBED_MODE` (shipped in Phase 2a) disables `/sync`, `/regen`,
+  `/resuppress`, the audit-log/findings subprocesses, and the SIGINT git-commit — so the old
+  always-on git/heavy behavior is gone regardless.
+- **Dataset-scoped:** serve under `/<dataset>/…`; each dataset has its own built artifacts +
+  ledger scope.
 
-### 3.5 Vetting → own Mongo collection (Atlas)
-- Move vetting off local `vetting.jsonl` + SQLite into **our own collection** in the same
-  Atlas cluster, keyed by `release_version`. **Never** write `series` / `seriesdatas`.
+### 3.5 Vetting → a named, durable ledger (Atlas)
+- Move vetting off local `vetting.jsonl` + SQLite into a **named, durable ledger** (our own
+  Atlas collection), **reusable across data versions**: apply a named ledger to any review
+  run so prior approvals suppress already-cleared flags — *build on* the ledger, don't re-fix
+  approved errors. Built artifacts (`flags.parquet`/`data.json`) + ledger snapshots persist to
+  S3/Atlas, not local disk. **Never** write `series` / `seriesdatas`.
 - Keep records **idempotent + version-pinned** (carry `release_version`/`git_sha` + the
   flagged cell value) — preserves the existing value-keyed re-surfacing and is exactly the
   shape a future promotion-gate reads.

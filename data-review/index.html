@@ -653,15 +653,28 @@ function toggleSourceVisibility(src) {
   persistHiddenSources();
   renderChartAndTable();
 }
+// Persistent review state from the Mongo ledger (loadVettings), aggregated per
+// (ISO3_VAR) pair. comments.json is an ephemeral per-container session cache;
+// the ledger is the durable cross-user truth, so statusOf falls back to it.
+function vettingStatusOf(key) {
+  const v = STATE.vettings && STATE.vettings.get(key);
+  if (!v) return null;
+  if (v.approved && v.pending) return "both";
+  if (v.approved) return "approved";
+  if (v.pending) return "commented";
+  if (v.limitation) return "limitation";
+  return null;
+}
 function statusOf(key) {
   const c = STATE.comments[key];
-  if (!c) return "none";
-  const has = c.comment && c.comment.trim().length > 0;
-  if (c.status === "known-limitation") return "limitation";
-  if (c.approved && has) return "both";
-  if (c.approved) return "approved";
-  if (has) return "commented";
-  return "none";
+  if (c) {
+    const has = c.comment && c.comment.trim().length > 0;
+    if (c.status === "known-limitation") return "limitation";
+    if (c.approved && has) return "both";
+    if (c.approved) return "approved";
+    if (has) return "commented";
+  }
+  return vettingStatusOf(key) || "none";
 }
 
 async function loadData() {
@@ -674,6 +687,27 @@ async function loadComments() {
     const r = await fetch("comments.json", { cache: "no-store" });
     if (r.ok) STATE.comments = await r.json();
   } catch (e) { console.warn("comments load failed", e); }
+}
+// Pull all active ledger vettings once and fold them into a per-pair status map
+// (ISO3_VAR -> {approved, pending, limitation}) so the sidebar shows red/green
+// indicators from the DURABLE Mongo store, not just the ephemeral comments.json
+// (which resets on every container redeploy).
+async function loadVettings() {
+  try {
+    const r = await fetch("vettings", { cache: "no-store" });
+    if (!r.ok) return;
+    const body = await r.json();
+    const m = new Map();
+    for (const v of (body.vettings || [])) {
+      const key = `${v.iso3}_${v.variable}`;
+      let e = m.get(key);
+      if (!e) { e = { approved: false, pending: false, limitation: false }; m.set(key, e); }
+      if (v.status === "vetted-correct") e.approved = true;
+      else if (v.status === "pending-fix") e.pending = true;
+      else if (v.status === "known-limitation") e.limitation = true;
+    }
+    STATE.vettings = m;
+  } catch (e) { console.warn("vettings load failed", e); }
 }
 
 function applyFilter() {
@@ -3068,6 +3102,9 @@ function bind() {
   $("apply-btn").addEventListener("click", () => applyApprovals());
   refreshRegenStatus();
   setInterval(refreshRegenStatus, 30000);
+  // Periodically re-pull the ledger so the sidebar reflects other reviewers'
+  // decisions without a page reload.
+  setInterval(async () => { await loadVettings(); renderSidebar(); }, 60000);
   $("history-toggle").addEventListener("click", () => showHistory());
   $("logscale").addEventListener("change", () => {
     try { localStorage.setItem("dqr_log", $("logscale").checked ? "1" : "0"); } catch (_) {}
@@ -3257,7 +3294,7 @@ function bind() {
 
 (async function init() {
   try {
-    await Promise.all([loadData(), loadComments()]);
+    await Promise.all([loadData(), loadComments(), loadVettings()]);
   } catch (e) {
     document.body.innerHTML = `<div style="padding:24px;color:#dc2626"><b>Error loading data:</b> ${e.message}<br><br>Did you run <code>python build_data.py</code> first?</div>`;
     return;

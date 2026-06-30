@@ -661,26 +661,21 @@ def start_job(steps: list, kind: str, env: dict | None = None) -> dict:
 
 
 def _refresh_steps() -> list:
-    """Full data refresh from S3, run INSIDE the server: re-sync the inputs,
-    recompute flags (MONGODB_URI, if set, drives vetting suppression), and
-    rebuild data.json. Fetch URIs default to the error-review bucket; scratch
-    defaults to ./_refresh_scratch (the container sets DATA_REVIEW_SCRATCH=/scratch)."""
-    scratch = os.environ.get("DATA_REVIEW_SCRATCH") or str(ROOT / "_refresh_scratch")
-    cl = os.environ.get("DATA_REVIEW_S3_CHAINLINKED", "s3://error-review/final/")
-    gmd = os.environ.get("DATA_REVIEW_S3_GMD", "s3://error-review/final/GMD.dta")
-    helpers = os.environ.get("DATA_REVIEW_S3_HELPERS", "s3://error-review/helpers/")
+    """Pull the latest PREBUILT artifacts from S3 (built off-box by CodeBuild on
+    each data upload) and atomically swap them in. Fast -- two downloads + a
+    rename, no flag compute in the serving container. Download to *.new first so
+    a concurrent GET /data.json never sees a half-written file; os.replace is
+    atomic, and if a download fails the existing files stay untouched."""
+    built = os.environ.get("DATA_REVIEW_S3_BUILT", "s3://error-review/built").rstrip("/")
     region = os.environ.get("AWS_REGION", "ap-southeast-1")
-    fetch = [sys.executable, str(ROOT / "fetch_inputs.py"),
-             "--chainlinked-uri", cl, "--gmd-uri", gmd, "--helpers-uri", helpers,
-             "--region", region, "--dest", scratch]
-    return [("fetch from S3", fetch, 900),
-            ("compute flags", [sys.executable, str(FLAGS_PY)], 1800),
-            ("build data.json", [sys.executable, str(BUILD_DATA_PY)], 600)]
-
-
-def _refresh_env() -> dict:
-    scratch = os.environ.get("DATA_REVIEW_SCRATCH") or str(ROOT / "_refresh_scratch")
-    return {"DATA_REVIEW_DATA_ROOT": scratch}
+    reg = ["--region", region] if region else []
+    dj, fp = str(DATA_PATH), str(FLAGS_PATH)
+    swap = f"import os; os.replace({dj!r}+'.new', {dj!r}); os.replace({fp!r}+'.new', {fp!r})"
+    return [
+        ("download data.json", ["aws", "s3", "cp", f"{built}/data.json", dj + ".new", *reg], 300),
+        ("download flags.parquet", ["aws", "s3", "cp", f"{built}/flags.parquet", fp + ".new", *reg], 300),
+        ("swap in", [sys.executable, "-c", swap], 30),
+    ]
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -891,12 +886,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             r = start_job(_resuppress_steps(), "resuppress")
             self._send_json(202 if r.get("started") else 409, r)
             return
-        # /refresh — re-pull the latest data from S3 and rebuild data.json +
-        # flags.parquet in-place (fetch_inputs -> flags.py -> build_data), then
-        # the dashboard reloads. Allowed in embed mode (it's the intended GMD
-        # refresh path); single-flight via the shared job slot.
+        # /refresh — pull the latest PREBUILT artifacts from S3 (built off-box by
+        # CodeBuild) and swap them in, then the dashboard reloads. Fast (two
+        # downloads). Allowed in embed mode; single-flight via the shared job slot.
         if self.path == "/refresh":
-            r = start_job(_refresh_steps(), "refresh", env=_refresh_env())
+            r = start_job(_refresh_steps(), "refresh")
             self._send_json(202 if r.get("started") else 409, r)
             return
         if self.path == "/reviewer":

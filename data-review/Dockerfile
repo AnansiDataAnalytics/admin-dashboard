@@ -1,7 +1,8 @@
-# Self-contained build+serve container for the data-review app.
-# On start it syncs inputs from S3 (fetch_inputs.py), builds data.json +
-# flags.parquet (flags.py, build_data.py), then serves (serve.py).
-# v1 trade-off: ~minutes cold start; optimise later to fetch prebuilt outputs.
+# Serve container for the data-review app. On start it pulls PREBUILT artifacts
+# (data.json + flags.parquet) from S3 -- built off-box by CodeBuild on each data
+# upload -- falling back to baked artifacts, then a full in-container build
+# (see entrypoint.sh). Then serves via serve.py. Vetting persists to Atlas
+# (MONGODB_URI); the container filesystem stays ephemeral.
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -18,7 +19,8 @@ ENV DATA_REVIEW_BIND=0.0.0.0 \
     PORT=8080 \
     DATA_REVIEW_IDLE_TIMEOUT=0 \
     DATA_REVIEW_EMBED=1 \
-    DATA_REVIEW_SCRATCH=/scratch
+    DATA_REVIEW_SCRATCH=/scratch \
+    DATA_REVIEW_S3_BUILT=s3://error-review/built
 
 EXPOSE 8080
 RUN chmod +x /app/entrypoint.sh

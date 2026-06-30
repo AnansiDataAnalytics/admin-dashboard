@@ -425,6 +425,12 @@
         <option value="approved">Approved</option>
         <option value="all">Show all</option>
       </select>
+      <div class="sidebar-label">Issue location</div>
+      <select id="loc-filter" title="Filter by WHERE the flag is: the harmonized GMD output itself, a source that feeds the spliced series, or any source at all">
+        <option value="any">Any source</option>
+        <option value="gmd">Issue in GMD series</option>
+        <option value="contrib">Issue in contributing source</option>
+      </select>
       <div id="new-weeks-row" style="display:none;font-size:11px;color:var(--muted);margin-top:2px">
         first flagged within the last
         <input id="new-weeks" type="number" min="1" max="104" value="1"
@@ -710,6 +716,7 @@ async function loadVettings() {
 function applyFilter() {
   const search = $("search").value.trim().toLowerCase();
   const mode = $("filter").value;
+  const locMode = $("loc-filter") ? $("loc-filter").value : "any";
   const sortMode = $("sort").dataset.value;
   // Reason-filter dropdown handles its own active-set; chips are gone.
   // Compute the active-reason set ONCE (it scans all pairs); calling it
@@ -728,6 +735,20 @@ function applyFilter() {
     if (mode === "tobereview" && !(st === "none" && allFlags.length > 0)) continue;
     if (mode === "errors" && st !== "commented") continue;
     if (mode === "approved" && !(st === "approved" || st === "both")) continue;
+    // Issue-location filter: is the flag on the harmonized GMD series, on a
+    // source that feeds it (contrib_sources), or anywhere?
+    if (locMode !== "any") {
+      const flaggedSrcs = new Set();
+      for (const f of allFlags) if (f.src) flaggedSrcs.add(f.src);
+      if (locMode === "gmd") {
+        if (!flaggedSrcs.has("GMD")) continue;
+      } else if (locMode === "contrib") {
+        const contrib = new Set(p.contrib_sources || []);
+        let hit = false;
+        for (const s of flaggedSrcs) { if (contrib.has(s)) { hit = true; break; } }
+        if (!hit) continue;
+      }
+    }
     // activeReasons is the COMPLEMENT of the unchecked reason checkboxes
     // (null when nothing is excluded -> no reason filtering). The pair must
     // have at least one flag whose reason short-name is still selected.
@@ -3192,6 +3213,10 @@ function bind() {
     $("new-weeks-row").style.display = $("filter").value === "new" ? "" : "none";
     renderSidebar();
   });
+  $("loc-filter").addEventListener("change", () => {
+    try { localStorage.setItem("dqr_loc_filter", $("loc-filter").value); } catch (_) {}
+    renderSidebar();
+  });
   $("new-weeks").addEventListener("input", () => {
     if ($("filter").value === "new") renderSidebar();
   });
@@ -3388,6 +3413,10 @@ function bind() {
       $("filter").value = "tobereview";
     }
   } catch (_) { $("filter").value = "tobereview"; }
+  try {
+    const lf = localStorage.getItem("dqr_loc_filter");
+    if (lf && [...$("loc-filter").options].some((o) => o.value === lf)) $("loc-filter").value = lf;
+  } catch (_) {}
   $("new-weeks-row").style.display = $("filter").value === "new" ? "" : "none";
   // Always open sorted by "most suspicious" (overrides any saved sort) so
   // the worst pairs are at the top of the list on every launch.

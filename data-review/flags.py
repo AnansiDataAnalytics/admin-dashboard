@@ -501,10 +501,14 @@ def check_lvl10(var: str) -> pd.DataFrame:
     src_cols = [c for c in df.columns if c.endswith(f"_{var}") and c != var]
     if len(src_cols) < LVL10_MIN_PEERS + 1:
         return empty_master()
+    # Treat the spliced GMD series (bare `var` column) as another focal series
+    # + peer, so a unit/decimal error in the harmonized OUTPUT surfaces too.
+    series_cols = src_cols + ([var] if var in df.columns else [])
+    label_of = {c: ("GMD" if c == var else c[: -len(f"_{var}")]) for c in series_cols}
 
     rows = []
     for iso, grp in df.groupby("ISO3"):
-        present = [c for c in src_cols if grp[c].notna().any()]
+        present = [c for c in series_cols if grp[c].notna().any()]
         if len(present) < LVL10_MIN_PEERS + 1:
             continue
         for focal in present:
@@ -531,7 +535,7 @@ def check_lvl10(var: str) -> pd.DataFrame:
             mode_p, n = _Counter(powers).most_common(1)[0]
             if n < LVL10_MIN_PEERS:
                 continue
-            source = focal[: -len(f"_{var}")]
+            source = label_of[focal]
             rows.append({
                 "ISO3": str(iso),
                 "year": np.nan,
@@ -566,6 +570,10 @@ def check_structural_break(var: str, gmd_infl: pd.DataFrame | None) -> pd.DataFr
     src_cols = [c for c in df.columns if c.endswith(f"_{var}") and c != var]
     if not src_cols:
         return empty_master()
+    # Also break-check the spliced GMD series itself (a >10x jump in the
+    # harmonized output is a splice discontinuity worth surfacing).
+    if var in df.columns:
+        src_cols = src_cols + [var]
 
     # build a (ISO3, year) -> infl lookup once
     infl_lookup: dict[tuple[str, int], float] = {}
@@ -576,7 +584,7 @@ def check_structural_break(var: str, gmd_infl: pd.DataFrame | None) -> pd.DataFr
 
     rows = []
     for sc in src_cols:
-        source = sc[: -len(f"_{var}")]
+        source = "GMD" if sc == var else sc[: -len(f"_{var}")]
         # narrow to rows with data in this source
         sub = df[["ISO3", "year", sc]].dropna(subset=[sc])
         if sub.empty:

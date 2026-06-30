@@ -2488,6 +2488,7 @@ function toggleShortcutsOverlay() {
 
 let syncInflight = false;
 async function syncToRemote() {
+  if (STATE.embed) { setSaveStatus("reviews save automatically — no sync needed ✓", "ok"); return; }
   if (syncInflight) return;
   syncInflight = true;
   // Save the in-flight comment first so the markdown picks it up
@@ -2527,6 +2528,16 @@ let jobPollTimer = null;
 
 function paintJobButtons(st) {
   const job = st.job || {};
+  if (st.embed) {
+    // Hosted/embedded mode: sync + flag-recompute run in the data pipeline, not
+    // from the browser (their endpoints 403). Hide the controls so reviewers
+    // never hit "disabled in embedded mode". Vetting still persists on every save.
+    STATE.embed = true;
+    for (const id of ["sync-btn", "regen-btn", "apply-btn"]) {
+      const b = $(id); if (b) b.style.display = "none";
+    }
+    return;
+  }
   const running = jobInflight || job.status === "running";
   const regen = $("regen-btn"), apply = $("apply-btn");
   if (running) {
@@ -2577,6 +2588,7 @@ async function refreshRegenStatus() {
 }
 
 async function runRecompute(endpoint, kind) {
+  if (STATE.embed) { setSaveStatus("flag recompute runs in the data pipeline, not here", "warn"); return; }
   if (jobInflight) return;
   jobInflight = true;
   if (STATE.unsavedDirty) await saveCurrent();

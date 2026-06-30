@@ -58,6 +58,12 @@ LLM_MODEL = os.environ.get("DQR_DIAGNOSE_MODEL", "claude-opus-4-7")
 
 sys.path.insert(0, str(ROOT))
 import rollups  # noqa: E402
+try:
+    import ledger  # Mongo-aware vetting store -- same backend serve.py writes to
+except Exception as _e:  # pragma: no cover
+    print(f"[diagnose] ledger import failed ({_e}); will replay vetting.jsonl",
+          file=sys.stderr)
+    ledger = None
 
 
 def _now_iso() -> str:
@@ -65,18 +71,13 @@ def _now_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
 
 
-def load_open_pending() -> list[dict]:
-    """Return the latest active (non-superseded, non-revoked) records
-    with status='pending-fix' grouped at the (iso3, variable) pair
-    level. The ledger may carry multiple per-cell records sharing one
-    comment + session_id; we collapse to one pair-level item so the
-    LLM and the fixer see one entry per actionable thing."""
+def _replay_jsonl_active() -> list[dict]:
+    """Fallback when the ledger module / Mongo is unavailable: replay
+    vetting.jsonl into the active per-cell record bodies (vet sets, revoke
+    clears, re-vet overwrites) -- same shape ledger.active_vettings() returns."""
     if not VETTING_PATH.exists():
         return []
-    # Replay vetting.jsonl (same logic as ledger.rebuild_from_jsonl).
     active: dict[tuple, dict] = {}
-    revoked: set[tuple] = set()
-    superseded: set[tuple] = set()
     with open(VETTING_PATH) as f:
         for line in f:
             line = line.strip()
@@ -87,51 +88,53 @@ def load_open_pending() -> list[dict]:
             except json.JSONDecodeError:
                 continue
             body = rec.get("body", {})
-            key = (
-                body.get("iso3"), body.get("year"), body.get("variable"),
-                body.get("source"), body.get("reason_type"),
-            )
-            op = rec.get("op")
-            if op == "revoke":
-                revoked.add(key); continue
-            # New record supersedes any prior active row with same key.
-            if key in active:
-                superseded.add(key)
-            active[key] = {
-                "iso3": body.get("iso3"),
-                "year": body.get("year"),
-                "variable": body.get("variable"),
-                "source": body.get("source"),
-                "reason_type": body.get("reason_type"),
-                "status": body.get("status"),
-                "justification": body.get("justification") or "",
-                "approved_by": body.get("approved_by"),
-                "approved_at": body.get("approved_at"),
-                "refs": body.get("refs"),
-            }
-    # Drop revoked + collapse to pair-level items keyed on (iso3, var).
+            key = (body.get("iso3"), body.get("year"), body.get("variable"),
+                   body.get("source"), body.get("reason_type"))
+            if rec.get("op") == "revoke":
+                active.pop(key, None)
+            else:
+                active[key] = body  # vet / edit: latest wins
+    return list(active.values())
+
+
+def load_open_pending() -> list[dict]:
+    """Return active status='pending-fix' vettings collapsed to one item per
+    (iso3, variable) pair. Reads via ledger.active_vettings() so it sees the
+    SAME backend serve.py writes to -- Mongo when MONGODB_URI is set
+    (deployment), else audit.db replayed from vetting.jsonl (local dev). The
+    ledger may hold many per-cell records per pair; we collapse them so the
+    fixer sees one actionable entry per pair."""
+    if ledger is not None:
+        try:
+            active = ledger.active_vettings()
+        except Exception as e:
+            print(f"[diagnose] ledger query failed ({e}); replaying vetting.jsonl",
+                  file=sys.stderr)
+            active = _replay_jsonl_active()
+    else:
+        active = _replay_jsonl_active()
     by_pair: dict[tuple[str, str], dict] = {}
-    for k, rec in active.items():
-        if k in revoked: continue
-        if rec["status"] != "pending-fix": continue
-        iso3, var = rec["iso3"], rec["variable"]
-        if not iso3 or not var: continue
+    for rec in active:
+        if rec.get("status") != "pending-fix":
+            continue
+        iso3, var = rec.get("iso3"), rec.get("variable")
+        if not iso3 or not var:
+            continue
         pair_key = (iso3, var)
         if pair_key in by_pair:
-            # Same pair already collected; just register that another
-            # cell-level record belongs to it.
             by_pair[pair_key]["n_cells"] += 1
-            if rec["source"] and rec["source"] not in by_pair[pair_key]["sources"]:
-                by_pair[pair_key]["sources"].append(rec["source"])
+            src = rec.get("source")
+            if src and src not in by_pair[pair_key]["sources"]:
+                by_pair[pair_key]["sources"].append(src)
             continue
         by_pair[pair_key] = {
             "key": f"{iso3}_{var}",
             "iso3": iso3,
             "variable": var,
-            "comment": rec["justification"],
-            "sources": [rec["source"]] if rec["source"] else [],
-            "approved_at": rec["approved_at"],
-            "approved_by": rec["approved_by"],
+            "comment": rec.get("justification") or "",
+            "sources": [rec["source"]] if rec.get("source") else [],
+            "approved_at": rec.get("approved_at"),
+            "approved_by": rec.get("approved_by"),
             "n_cells": 1,
         }
     return sorted(by_pair.values(), key=lambda r: (r["iso3"], r["variable"]))

@@ -775,7 +775,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/regen/status":
             with _REGEN_LOCK:
                 job = dict(_REGEN_STATE)
-            self._send_json(200, {"job": job, **manifest_status()})
+            # `embed` lets the dashboard hide the sync/regenerate/apply controls
+            # (their POST endpoints 403 here) so reviewers never hit a failure.
+            self._send_json(200, {"job": job, "embed": EMBED_MODE, **manifest_status()})
             return
         if path in ("/", "/index.html"):
             if not INDEX_PATH.exists():

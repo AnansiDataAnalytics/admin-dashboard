@@ -187,19 +187,19 @@ def empty_master() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Per-variable checks (gmd_check.ado, called for each chainlinked_<var>.dta)
 # ---------------------------------------------------------------------------
-def per_variable(var: str, posratios: list[str], othratios: list[str], rates: list[str],
+def per_variable(var: str, raw_df, posratios: list[str], othratios: list[str], rates: list[str],
                  levels: list[str], indices: list[str]) -> pd.DataFrame:
     """Reproduces gmd_check on one chainlinked_<var>.dta. Output rows are
-    only those with check==1 (matches error_checking.do:120)."""
-    path = DATA_FINAL / f"chainlinked_{var}.dta"
-    if not path.exists():
+    only those with check==1 (matches error_checking.do:120). `raw_df` is the
+    pristine chainlinked_<var>.dta frame, read once by build_all and shared with
+    check_lvl10/check_structural_break; we derive our own working copy below and
+    never mutate it."""
+    if raw_df is None:
         print(f"WARNING: {var} file not found in data/final folder, not checked", file=sys.stderr)
         return empty_master()
 
-    df = pd.read_stata(path, convert_categoricals=False)
-
     # error_checking.do:107: cap drop if ISO3 == "USA"
-    df = df[df["ISO3"] != "USA"].copy()
+    df = raw_df[raw_df["ISO3"] != "USA"].copy()
 
     # error_checking.do:110: cap ren IMF_WEO_forecast* IMF_WEO_f*
     df = df.rename(columns={c: c.replace("IMF_WEO_forecast", "IMF_WEO_f")
@@ -480,7 +480,7 @@ COUNTRY_SHARE_BAND_OLD = 10.0
 COUNTRY_SHARE_WINDOW = 30    # years
 
 
-def check_lvl10(var: str) -> pd.DataFrame:
+def check_lvl10(var: str, raw_df) -> pd.DataFrame:
     """Per (ISO3, source), flag when the median ratio against >=N peers
     rounds to a clean non-zero integer power of 10. Catches decimal-place
     bugs that the Stata pipeline misses (it has no peer-comparison check
@@ -493,11 +493,9 @@ def check_lvl10(var: str) -> pd.DataFrame:
     + the dashboard's YoY heuristic) keep firing for those variables."""
     if var in INDICES:
         return empty_master()
-    path = DATA_FINAL / f"chainlinked_{var}.dta"
-    if not path.exists():
+    if raw_df is None:
         return empty_master()
-    df = pd.read_stata(path, convert_categoricals=False)
-    df = df[df["ISO3"] != "USA"]
+    df = raw_df[raw_df["ISO3"] != "USA"]
     src_cols = [c for c in df.columns if c.endswith(f"_{var}") and c != var]
     if len(src_cols) < LVL10_MIN_PEERS + 1:
         return empty_master()
@@ -551,7 +549,7 @@ def check_lvl10(var: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def check_structural_break(var: str, gmd_infl: pd.DataFrame | None) -> pd.DataFrame:
+def check_structural_break(var: str, raw_df, gmd_infl: pd.DataFrame | None) -> pd.DataFrame:
     """Per (ISO3, year, source), within each source's series flag a
     >10x YoY jump unless `infl` in that year exceeds BREAK_INFL_HYPER
     (real hyperinflation). The vetting ledger is meant to mark legitimate
@@ -562,11 +560,9 @@ def check_structural_break(var: str, gmd_infl: pd.DataFrame | None) -> pd.DataFr
     ratio, and rates often move 1.0% -> 0.1% legitimately."""
     if var in OTHRATIOS or var in RATES:
         return empty_master()
-    path = DATA_FINAL / f"chainlinked_{var}.dta"
-    if not path.exists():
+    if raw_df is None:
         return empty_master()
-    df = pd.read_stata(path, columns=None, convert_categoricals=False)
-    df = df[df["ISO3"] != "USA"].sort_values(["ISO3", "year"]).reset_index(drop=True)
+    df = raw_df[raw_df["ISO3"] != "USA"].sort_values(["ISO3", "year"]).reset_index(drop=True)
     src_cols = [c for c in df.columns if c.endswith(f"_{var}") and c != var]
     if not src_cols:
         return empty_master()
@@ -847,17 +843,26 @@ def categorize_check(vars_: list[str]) -> None:
         sys.exit(9)
 
 
+def _read_chainlinked(var: str):
+    """Read chainlinked_<var>.dta once (full file, convert_categoricals=False),
+    or None if missing. The three per-variable checks (per_variable, check_lvl10,
+    check_structural_break) share this single read instead of each reading the
+    file -- reading once instead of 3x is the bulk of flags.py's wall-clock,
+    especially on a small (1 vCPU) instance. Each callee derives its own working
+    copy and never mutates the returned frame."""
+    path = DATA_FINAL / f"chainlinked_{var}.dta"
+    if not path.exists():
+        return None
+    return pd.read_stata(path, convert_categoricals=False)
+
+
 def build_all() -> pd.DataFrame:
     vars_ = load_var_list()
     categorize_check(vars_)
     print(f"Checking {len(vars_)} variables: {vars_}")
 
-    pieces = []
-    for var in vars_:
-        print(f"  Checking {var}")
-        pieces.append(per_variable(var, POSRATIOS, OTHRATIOS, RATES, LEVELS, INDICES))
-
-    # ----- Cross-variable checks (read GMD.dta once) -----
+    # GMD.dta drives the cross-variable checks AND check_structural_break's
+    # hyperinflation guard, so read it once up front.
     gmd_cols = list({
         "ISO3", "id", "year",
         "CPI", "infl", "deflator", "rGDP", "USDfx",
@@ -871,6 +876,19 @@ def build_all() -> pd.DataFrame:
     })
     gmd = pd.read_stata(DATA_DISTR / "GMD.dta", columns=gmd_cols, convert_categoricals=False)
 
+    pieces = []
+    # ----- Per-variable checks: read each chainlinked_<var>.dta ONCE and run all
+    # three per-variable checks on the shared raw frame (each derives its own
+    # copy; none mutate the shared one). One frame in memory at a time -- the
+    # earlier 3-separate-loops layout read every file 3x. -----
+    for var in vars_:
+        print(f"  Checking {var}")
+        raw = _read_chainlinked(var)
+        pieces.append(per_variable(var, raw, POSRATIOS, OTHRATIOS, RATES, LEVELS, INDICES))
+        pieces.append(check_lvl10(var, raw))            # peer lvl10 (decimal-place bug)
+        pieces.append(check_structural_break(var, raw, gmd))  # within-source breaks
+
+    # ----- Cross-variable checks (use the GMD.dta frame) -----
     print("Checking gen-vs-central gov ratio")
     pieces.append(check_gen_vs_central_gov(gmd))
     print("Checking deficit identity")
@@ -881,14 +899,6 @@ def build_all() -> pd.DataFrame:
     pieces.append(check_gdp_accounting_identity(gmd))
     print("Checking GDP component comovement")
     pieces.append(check_gdp_component_comovement(gmd))
-
-    # ----- New checks (additive; each has its own reason_* column) -----
-    print("Checking peer lvl10 (decimal-place bug)")
-    for var in vars_:
-        pieces.append(check_lvl10(var))
-    print("Checking within-source structural breaks")
-    for var in vars_:
-        pieces.append(check_structural_break(var, gmd))
     print("Checking M0<=M1<=M2<=M3<=M4 ordering")
     pieces.append(check_m_ordering(gmd))
     print("Checking real-rate plausibility")

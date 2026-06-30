@@ -48,7 +48,7 @@ MANIFEST_PATH = ROOT / "flags_manifest.json"    # input fingerprints, written by
 _REGEN_LOCK = threading.Lock()
 _REGEN_STATE: dict = {
     "status": "idle",      # idle | running | done | error
-    "kind": None,          # regen (full) | resuppress (fast)
+    "kind": None,          # regen (full) | resuppress (fast) | refresh (S3 rebuild)
     "started_at": None,
     "finished_at": None,
     "step": None,          # which subprocess is/was running
@@ -56,6 +56,10 @@ _REGEN_STATE: dict = {
     "log_tail": None,
     "returncode": None,
 }
+
+# Last successful data refresh (S3 -> rebuild) timestamp, surfaced to the
+# dashboard's "Refresh data" button. Seeded from data.json's mtime at startup.
+_REFRESH_META: dict = {"last_refresh_at": None}
 
 # Lazy-loaded vetting ledger (audit_dashboard/ledger.py); fall back to None
 # if the module fails to import so the server still serves data.json.
@@ -610,19 +614,24 @@ def _resuppress_steps() -> list:
             ("build_data.py", [sys.executable, str(BUILD_DATA_PY)], 600)]
 
 
-def _run_job(steps: list) -> None:
+def _run_job(steps: list, env: dict | None = None) -> None:
     """Worker thread: run each step in order, updating _REGEN_STATE so
-    /regen/status can report progress."""
+    /regen/status + /refresh/status can report progress. `env` overlays extra
+    environment vars onto each subprocess (e.g. the scratch DATA_REVIEW_DATA_ROOT
+    for a refresh job)."""
     def _finish(**kw):
         with _REGEN_LOCK:
             _REGEN_STATE.update(finished_at=_dt.datetime.now().isoformat(timespec="seconds"), **kw)
+            if kw.get("status") == "done" and _REGEN_STATE.get("kind") == "refresh":
+                _REFRESH_META["last_refresh_at"] = _REGEN_STATE["finished_at"]
 
+    run_env = {**os.environ, **(env or {})}
     tail = ""
     try:
         for name, argv, timeout in steps:
             with _REGEN_LOCK:
                 _REGEN_STATE.update(step=name)
-            r = subprocess.run(argv, cwd=str(REPO),
+            r = subprocess.run(argv, cwd=str(REPO), env=run_env,
                                capture_output=True, text=True, timeout=timeout)
             tail = ((r.stdout or "")[-2000:] + (r.stderr or "")[-2000:]).strip()
             if r.returncode != 0:
@@ -637,9 +646,9 @@ def _run_job(steps: list) -> None:
         _finish(status="error", error=str(e), log_tail=tail or None)
 
 
-def start_job(steps: list, kind: str) -> dict:
+def start_job(steps: list, kind: str, env: dict | None = None) -> dict:
     """Kick off a background job if none is running. Returns the job state.
-    `kind` is 'regen' or 'resuppress' so the dashboard can label it."""
+    `kind` is 'regen' | 'resuppress' | 'refresh' so the dashboard can label it."""
     with _REGEN_LOCK:
         if _REGEN_STATE["status"] == "running":
             return {"started": False, **_REGEN_STATE}
@@ -647,8 +656,31 @@ def start_job(steps: list, kind: str) -> dict:
                             started_at=_dt.datetime.now().isoformat(timespec="seconds"),
                             finished_at=None, step=None, error=None, log_tail=None, returncode=None)
         snapshot = dict(_REGEN_STATE)
-    threading.Thread(target=_run_job, args=(steps,), daemon=True).start()
+    threading.Thread(target=_run_job, args=(steps, env), daemon=True).start()
     return {"started": True, **snapshot}
+
+
+def _refresh_steps() -> list:
+    """Full data refresh from S3, run INSIDE the server: re-sync the inputs,
+    recompute flags (MONGODB_URI, if set, drives vetting suppression), and
+    rebuild data.json. Fetch URIs default to the error-review bucket; scratch
+    defaults to ./_refresh_scratch (the container sets DATA_REVIEW_SCRATCH=/scratch)."""
+    scratch = os.environ.get("DATA_REVIEW_SCRATCH") or str(ROOT / "_refresh_scratch")
+    cl = os.environ.get("DATA_REVIEW_S3_CHAINLINKED", "s3://error-review/final/")
+    gmd = os.environ.get("DATA_REVIEW_S3_GMD", "s3://error-review/final/GMD.dta")
+    helpers = os.environ.get("DATA_REVIEW_S3_HELPERS", "s3://error-review/helpers/")
+    region = os.environ.get("AWS_REGION", "ap-southeast-1")
+    fetch = [sys.executable, str(ROOT / "fetch_inputs.py"),
+             "--chainlinked-uri", cl, "--gmd-uri", gmd, "--helpers-uri", helpers,
+             "--region", region, "--dest", scratch]
+    return [("fetch from S3", fetch, 900),
+            ("compute flags", [sys.executable, str(FLAGS_PY)], 1800),
+            ("build data.json", [sys.executable, str(BUILD_DATA_PY)], 600)]
+
+
+def _refresh_env() -> dict:
+    scratch = os.environ.get("DATA_REVIEW_SCRATCH") or str(ROOT / "_refresh_scratch")
+    return {"DATA_REVIEW_DATA_ROOT": scratch}
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -779,6 +811,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # (their POST endpoints 403 here) so reviewers never hit a failure.
             self._send_json(200, {"job": job, "embed": EMBED_MODE, **manifest_status()})
             return
+        # /refresh/status — state of the on-screen "Refresh data" job + the
+        # timestamp of the last successful refresh (for the button's label).
+        if path == "/refresh/status":
+            with _REGEN_LOCK:
+                s = dict(_REGEN_STATE)
+            running = s.get("kind") == "refresh" and s.get("status") == "running"
+            err = s.get("error") if (s.get("kind") == "refresh" and s.get("status") == "error") else None
+            self._send_json(200, {"running": running, "step": s.get("step"),
+                                  "error": err, "last_refresh_at": _REFRESH_META.get("last_refresh_at")})
+            return
         if path in ("/", "/index.html"):
             if not INDEX_PATH.exists():
                 self.send_error(500, "index.html missing")
@@ -847,6 +889,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         if self.path == "/resuppress":
             r = start_job(_resuppress_steps(), "resuppress")
+            self._send_json(202 if r.get("started") else 409, r)
+            return
+        # /refresh — re-pull the latest data from S3 and rebuild data.json +
+        # flags.parquet in-place (fetch_inputs -> flags.py -> build_data), then
+        # the dashboard reloads. Allowed in embed mode (it's the intended GMD
+        # refresh path); single-flight via the shared job slot.
+        if self.path == "/refresh":
+            r = start_job(_refresh_steps(), "refresh", env=_refresh_env())
             self._send_json(202 if r.get("started") else 409, r)
             return
         if self.path == "/reviewer":
@@ -953,6 +1003,12 @@ def main(argv: list[str]) -> int:
     if not DATA_PATH.exists():
         print("⚠️  data.json not found. Run `python build_data.py` first.")
         # still serve so user can see the error message in browser
+    else:
+        try:
+            _REFRESH_META["last_refresh_at"] = _dt.datetime.fromtimestamp(
+                DATA_PATH.stat().st_mtime, _dt.timezone.utc).isoformat(timespec="seconds")
+        except Exception:
+            pass
 
     # Bind host: 127.0.0.1 for local dev; a container sets DATA_REVIEW_BIND=0.0.0.0
     # so the platform/ALB can route to it.

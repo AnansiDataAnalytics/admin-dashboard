@@ -56,7 +56,18 @@ Point the Next rewrite at the service: set **`DATA_REVIEW_TARGET=https://kzaseva
   base + scan in CI before production.
 
 ## Deferred (not built)
-- Scale-to-zero: App Runner `pause-service`/`resume-service` + a dashboard Start/Stop control.
-  Currently **always-running** (`DATA_REVIEW_IDLE_TIMEOUT=0`).
-- Data refresh = rebuild + push the image (data is baked). Later: fetch-prebuilt-from-S3 on start.
-- Sleep-countdown banner UX (see the main plan's Deferred section).
+- **Auto-rebuild on S3 upload**: agreed model = prebuilt artifacts (a build uploads
+  `data.json`+`flags.parquet` to S3; the container fetches them at start) + an
+  upload/pipeline trigger. Interim refresh paths shipped: the on-screen **↻ Refresh
+  data** button (re-pulls S3 + rebuilds *in the running instance*; per-instance, resets
+  on container restart) and `deploy/refresh.sh` (full bake + redeploy, persistent).
+- Scale-to-zero: App Runner `pause-service`/`resume-service` + a dashboard Start/Stop
+  control. Currently **always-running** (`DATA_REVIEW_IDLE_TIMEOUT=0`).
+- A/Q/M (WED) frequencies; sleep-countdown banner UX (see the main plan's Deferred section).
+
+## ⚠️ The on-screen "Refresh data" button needs S3 read at runtime
+The button makes the **container** fetch from S3, so the App Runner **instance role**
+(`data-review-apprunner-instance`) must allow `s3:GetObject`/`s3:ListBucket` on the source
+bucket (`error-review`). It's currently scoped to `data-review-app-test` — update it before
+relying on the deployed button. (Local `serve.py` uses your own creds, so local testing
+works without this.)

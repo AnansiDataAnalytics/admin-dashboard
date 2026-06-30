@@ -141,6 +141,9 @@
   .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
   /* table */
   .tbl-wrap { margin-top: 14px; max-height: 280px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; }
+  .tbl-wrap td.ratio-col, .tbl-wrap th.ratio-col { color: var(--muted); font-size: 11px; background: #fafafa; }
+  .tbl-wrap th.src-contrib { color: #065f46; }
+  .contrib-dot { color: #10b981; font-size: 9px; vertical-align: middle; }
   table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
   th, td { padding: 3px 8px; border-bottom: 1px solid #f0f0f0; text-align: right; white-space: nowrap; }
   th { background: #fafafa; position: sticky; top: 0; font-weight: 600; }
@@ -417,14 +420,10 @@
       <div class="counts" id="counts">Loading…</div>
       <input id="search" type="search" placeholder="Filter ISO3 or var (press /)…" autocomplete="off" />
       <select id="filter">
+        <option value="tobereview">To be reviewed (flagged, no decision)</option>
+        <option value="errors">Marked errors</option>
+        <option value="approved">Approved</option>
         <option value="all">Show all</option>
-        <option value="unreviewed">Only unreviewed</option>
-        <option value="commented">Only commented</option>
-        <option value="approved">Only approved</option>
-        <option value="limitation">Only known-limitations</option>
-        <option value="reviewed">Only reviewed (any disposition)</option>
-        <option value="flagged">Only flagged (any type)</option>
-        <option value="new">Only new (first flagged recently)</option>
       </select>
       <div id="new-weeks-row" style="display:none;font-size:11px;color:var(--muted);margin-top:2px">
         first flagged within the last
@@ -474,9 +473,8 @@
           <span style="font-size:11px;color:var(--muted)">— or click any point on the chart</span>
         </span>
         <label><input type="checkbox" id="logscale" checked /> log scale (y)</label>
-        <button id="sync-btn" title="commit + push docs/GMD_AUDIT_LOG.md and SOURCE_ISSUES.md to origin (Cmd/Ctrl+S)">📤 sync</button>
-        <button id="regen-btn" title="Recompute the flag engine (flags.py) over the latest pipeline outputs, then refresh the dashboard">⟳ regenerate flags</button>
-        <button id="apply-btn" title="Fast: re-apply your approvals to the cached flags and refresh the list (no full recompute)">apply approvals</button>
+        <button id="refresh-data-btn" title="Re-pull the latest data from S3 and rebuild the dashboard (fetch + flags + build). Takes a few minutes; the page reloads when done.">↻ Refresh data</button>
+        <span id="refresh-status" class="save-status" style="font-size:11px;color:var(--muted)"></span>
         <span class="save-status" id="save-status"></span>
       </div>
     </header>
@@ -498,7 +496,6 @@
         <kbd>c</kbd> focus comment · <kbd>u</kbd> next unreviewed · <kbd>/</kbd> search<br>
         <kbd>i</kbd> cycle through "Issue is in" sources<br>
         <kbd>v</kbd> cycle view (levels/YoY/rebased)<br>
-        <kbd>s</kbd> sync to origin<br>
         <kbd>Esc</kbd> unfocus (re-enable shortcuts) + dismiss overlays
       </div>
       <div class="comment-block">
@@ -714,16 +711,6 @@ function applyFilter() {
   const search = $("search").value.trim().toLowerCase();
   const mode = $("filter").value;
   const sortMode = $("sort").dataset.value;
-  // "new" mode: cutoff date = today - N weeks. A pair qualifies if its
-  // first_seen (earliest weekly snapshot it was flagged in) is on/after
-  // the cutoff -- i.e. it started being flagged recently.
-  let newCutoff = null;
-  if (mode === "new") {
-    const weeks = Math.max(1, parseInt($("new-weeks").value, 10) || 1);
-    const d = new Date();
-    d.setDate(d.getDate() - weeks * 7);
-    newCutoff = d.toISOString().slice(0, 10);  // YYYY-MM-DD
-  }
   // Reason-filter dropdown handles its own active-set; chips are gone.
   // Compute the active-reason set ONCE (it scans all pairs); calling it
   // per-pair made applyFilter O(N²) and hung the render on 6,400 pairs.
@@ -733,17 +720,14 @@ function applyFilter() {
     const p = STATE.data.pairs[i];
     if (search && !((p.iso3 + " " + p.var).toLowerCase().includes(search))) continue;
     const st = statusOf(pairKey(p));
-    if (mode === "unreviewed" && st !== "none") continue;
-    if (mode === "commented" && !(st === "commented" || st === "both")) continue;
-    if (mode === "approved" && !(st === "approved" || st === "both")) continue;
-    if (mode === "limitation" && st !== "limitation") continue;
-    if (mode === "reviewed" && st === "none") continue;
     const allFlags = pairAllFlags(p);
-    if (mode === "flagged" && allFlags.length === 0) continue;
-    if (mode === "new") {
-      if (allFlags.length === 0) continue;            // only flagged pairs
-      if (!p.first_seen || p.first_seen < newCutoff) continue;
-    }
+    // Three primary filters (anything else, e.g. "all", applies no status filter):
+    //   tobereview = has >=1 flag and no decision yet (not approved, not errored)
+    //   errors     = marked as an error (pending-fix -> statusOf "commented")
+    //   approved   = approved (vetted-correct -> "approved"/"both")
+    if (mode === "tobereview" && !(st === "none" && allFlags.length > 0)) continue;
+    if (mode === "errors" && st !== "commented") continue;
+    if (mode === "approved" && !(st === "approved" || st === "both")) continue;
     // activeReasons is the COMPLEMENT of the unchecked reason checkboxes
     // (null when nothing is excluded -> no reason filtering). The pair must
     // have at least one flag whose reason short-name is still selected.
@@ -849,7 +833,15 @@ function renderChartAndTable() {
   // Column order: GMD (the spliced anchor) first if present, then all
   // other sources alphabetical. No Mitchell privilege; if a pair has
   // no Mitchell data at all, Mitchell simply doesn't appear in `order`.
-  const rest = allSources.filter((s) => s !== "GMD").sort();
+  // Sources that actually fed the spliced GMD series (named in the dta's
+  // `source` column) sort first and get a marker; the rest follow. GMD (the
+  // spliced result) always leads.
+  const contribSet = new Set(p.contrib_sources || []);
+  const rest = allSources.filter((s) => s !== "GMD").sort((a, b) => {
+    const ca = contribSet.has(a), cb = contribSet.has(b);
+    if (ca !== cb) return ca ? -1 : 1;
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
   const order = allSources.includes("GMD") ? ["GMD", ...rest] : rest;
 
   const mode = $("viewmode").dataset.value;
@@ -1399,23 +1391,31 @@ function renderChartAndTable() {
     }
   }
 
-  let html = "<table><thead><tr><th>Year</th>";
+  // Chainlinking ratio per year — leftmost data column.
+  const ratioMap = {};
+  for (const [yy, rr] of (p.ratio || [])) ratioMap[yy] = rr;
+  const fmtRatioCell = (r) => (r == null ? "" :
+    Number(r).toLocaleString(undefined, { maximumSignificantDigits: 4 }));
+
+  let html = `<table><thead><tr><th>Year</th>`
+           + `<th class="ratio-col" title="chainlinking_ratio: factor applied to splice each source onto the chain (1 = the chain anchor)">ratio</th>`;
   for (const s of order) {
+    const contrib = contribSet.has(s);
+    const mark = contrib ? `<span class="contrib-dot" title="Feeds the final spliced GMD series">●</span> ` : "";
     const issues = flagBySource[s];
     if (issues && issues.size) {
       const tip = [...issues].sort().join(" · ");
-      // No native `title` -- popover is click-driven so it doesn't appear
-      // accidentally on hover. The data-issues + data-src attributes feed
-      // the popover handler attached at the end of this function.
-      html += `<th class="src-flagged" data-src="${escapeHtml(s)}" `
-            + `data-issues="${escapeHtml(tip)}">${s} ⚑</th>`;
+      // popover is click-driven (data-issues/data-src feed the handler below).
+      html += `<th class="src-flagged${contrib ? " src-contrib" : ""}" data-src="${escapeHtml(s)}" `
+            + `data-issues="${escapeHtml(tip)}">${mark}${s} ⚑</th>`;
     } else {
-      html += `<th>${s}</th>`;
+      html += `<th${contrib ? ' class="src-contrib"' : ''}>${mark}${s}</th>`;
     }
   }
   html += "</tr></thead><tbody>";
   for (const y of years) {
-    html += `<tr><td>${y}</td>`;
+    html += `<tr><td>${y}</td>`
+          + `<td class="ratio-col">${fmtRatioCell(ratioMap[y])}</td>`;
     const av = maps[anchor]?.[y];
     for (const s of order) {
       const cls = [];
@@ -2520,6 +2520,72 @@ function toggleShortcutsOverlay() {
   el.style.display = (el.style.display === "block") ? "none" : "block";
 }
 
+// ---- Refresh data from S3 (GMD-specific) -----------------------------------
+// POST /refresh re-runs the build pipeline INSIDE the running server
+// (fetch_inputs -> flags.py -> build_data), regenerating data.json +
+// flags.parquet, then the page reloads. Single-flight on the server; the
+// button is disabled + shows status while a refresh runs.
+let refreshInflight = false;
+let refreshPollTimer = null;
+async function fetchRefreshStatus() {
+  try { const r = await fetch("refresh/status", { cache: "no-store" }); return await r.json(); }
+  catch (_) { return null; }
+}
+function setRefreshStatus(text, cls) {
+  const el = $("refresh-status"); if (!el) return;
+  el.textContent = text;
+  el.className = "save-status" + (cls ? " " + cls : "");
+}
+async function pollRefresh() {
+  const st = await fetchRefreshStatus();
+  if (!st) return;
+  if (st.running) { setRefreshStatus("refreshing… " + (st.step || ""), ""); return; }
+  if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
+  refreshInflight = false;
+  const btn = $("refresh-data-btn"); if (btn) btn.disabled = false;
+  if (st.error) setRefreshStatus("refresh failed — " + st.error, "err");
+  else { setRefreshStatus("refreshed ✓ — reloading…", "ok"); setTimeout(() => location.reload(), 900); }
+}
+async function refreshData() {
+  if (refreshInflight) return;
+  if (!confirm("Re-pull the latest data from S3 and rebuild the dashboard?\n\nThis takes a few minutes; the page reloads when it's done. Saved reviews are not affected.")) return;
+  refreshInflight = true;
+  const btn = $("refresh-data-btn"); if (btn) btn.disabled = true;
+  setRefreshStatus("starting refresh…", "");
+  try {
+    const r = await fetch("refresh", { method: "POST" });
+    if (r.status === 409) { setRefreshStatus("a refresh is already running…", "warn"); }
+    else if (!r.ok && r.status !== 202) {
+      const d = await r.json().catch(() => ({}));
+      setRefreshStatus("refresh failed — " + (d.error || `HTTP ${r.status}`), "err");
+      refreshInflight = false; if (btn) btn.disabled = false; return;
+    }
+    if (refreshPollTimer) clearInterval(refreshPollTimer);
+    refreshPollTimer = setInterval(pollRefresh, 4000);
+  } catch (e) {
+    setRefreshStatus("refresh failed — " + e.message, "err");
+    refreshInflight = false; if (btn) btn.disabled = false;
+  }
+}
+// On load + periodically: reflect a refresh started elsewhere + show data age.
+async function refreshDataStatus() {
+  const st = await fetchRefreshStatus();
+  if (!st) return;
+  const btn = $("refresh-data-btn");
+  if (st.running) {
+    refreshInflight = true;
+    if (btn) btn.disabled = true;
+    setRefreshStatus("refreshing… " + (st.step || ""), "");
+    if (!refreshPollTimer) refreshPollTimer = setInterval(pollRefresh, 4000);
+  } else if (!refreshInflight) {
+    if (btn) btn.disabled = false;
+    if (st.last_refresh_at) {
+      const t = String(st.last_refresh_at).replace("T", " ").replace("+00:00", "Z");
+      setRefreshStatus("data as of " + t, "");
+    }
+  }
+}
+
 let syncInflight = false;
 async function syncToRemote() {
   if (STATE.embed) { setSaveStatus("reviews save automatically — no sync needed ✓", "ok"); return; }
@@ -3099,11 +3165,9 @@ function bind() {
   $("undo-btn").addEventListener("click", popUndo);
   $("undo-btn").disabled = true;
   $("legend-btn").addEventListener("click", () => toggleShortcutsOverlay());
-  $("sync-btn").addEventListener("click", () => syncToRemote());
-  $("regen-btn").addEventListener("click", () => regenFlags());
-  $("apply-btn").addEventListener("click", () => applyApprovals());
-  refreshRegenStatus();
-  setInterval(refreshRegenStatus, 30000);
+  $("refresh-data-btn").addEventListener("click", () => refreshData());
+  refreshDataStatus();
+  setInterval(refreshDataStatus, 20000);
   // Periodically re-pull the ledger so the sidebar reflects other reviewers'
   // decisions without a page reload.
   setInterval(async () => { await loadVettings(); renderSidebar(); }, 60000);
@@ -3243,7 +3307,6 @@ function bind() {
     }
     // Single-letter shortcuts.
     if (e.key === "/")                 { e.preventDefault(); $("search").focus(); }
-    else if (e.key === "s" || e.key === "S") { e.preventDefault(); syncToRemote(); }
     else if (e.key === "c" || e.key === "C") { e.preventDefault(); $("comment").focus(); }
     else if (e.key === "k" || e.key === "K") { e.preventDefault(); limitationAndNext(); }
     else if (e.key === "u" || e.key === "U") { e.preventDefault(); jumpToNextUnreviewed(); }
@@ -3322,9 +3385,9 @@ function bind() {
     if (f && [...$("filter").options].some((o) => o.value === f)) {
       $("filter").value = f;
     } else {
-      $("filter").value = "unreviewed";
+      $("filter").value = "tobereview";
     }
-  } catch (_) { $("filter").value = "unreviewed"; }
+  } catch (_) { $("filter").value = "tobereview"; }
   $("new-weeks-row").style.display = $("filter").value === "new" ? "" : "none";
   // Always open sorted by "most suspicious" (overrides any saved sort) so
   // the worst pairs are at the top of the list on every launch.

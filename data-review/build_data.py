@@ -185,6 +185,20 @@ def main() -> int:
             year_min = min(d[0] for series in sources.values() for d in series)
             year_max = max(d[0] for series in sources.values() for d in series)
 
+            # Chainlinking ratio per year (shown as the leftmost table column)
+            # and which sources actually fed the spliced GMD series (the
+            # `source` column names the contributor of each spliced year).
+            ratio_series = []
+            if "chainlinking_ratio" in group.columns:
+                rv = group.loc[group["chainlinking_ratio"].notna(),
+                               ["year", "chainlinking_ratio"]].sort_values("year")
+                ratio_series = [[int(r.year), _round(getattr(r, "chainlinking_ratio"))]
+                                for r in rv.itertuples(index=False)]
+            contrib_sources = []
+            if "source" in group.columns:
+                contrib_sources = sorted({str(s) for s in group["source"].dropna()
+                                          if str(s) not in ("", "nan")})
+
             heur_by_src: dict[str, list[dict]] = {}
             sev_by_src: dict[str, int] = {}
             for src_name in sources:
@@ -202,6 +216,8 @@ def main() -> int:
                 "n_obs": {s: len(v) for s, v in sources.items()},
                 "year_min": year_min,
                 "year_max": year_max,
+                "ratio": ratio_series,
+                "contrib_sources": contrib_sources,
                 "engine_flags": pair_engine_flags,
                 "heuristic_flags": heur_by_src,
                 "sev": sev_by_src,

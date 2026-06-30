@@ -479,7 +479,7 @@
           <span style="font-size:11px;color:var(--muted)">— or click any point on the chart</span>
         </span>
         <label><input type="checkbox" id="logscale" checked /> log scale (y)</label>
-        <button id="refresh-data-btn" title="Re-pull the latest data from S3 and rebuild the dashboard (fetch + flags + build). Takes a few minutes; the page reloads when done.">↻ Refresh data</button>
+        <button id="refresh-data-btn" title="Pull the latest prebuilt data from S3 and reload (~seconds). Builds run automatically off-box when new data is uploaded to the bucket.">↻ Refresh data</button>
         <span id="refresh-status" class="save-status" style="font-size:11px;color:var(--muted)"></span>
         <span class="save-status" id="save-status"></span>
       </div>
@@ -2569,7 +2569,7 @@ async function pollRefresh() {
 }
 async function refreshData() {
   if (refreshInflight) return;
-  if (!confirm("Re-pull the latest data from S3 and rebuild the dashboard?\n\nThis takes a few minutes; the page reloads when it's done. Saved reviews are not affected.")) return;
+  if (!confirm("Pull the latest data from S3 and reload?\n\nTakes a few seconds (rebuilds run automatically off-box when new data is uploaded). Saved reviews are not affected.")) return;
   refreshInflight = true;
   const btn = $("refresh-data-btn"); if (btn) btn.disabled = true;
   setRefreshStatus("starting refresh…", "");

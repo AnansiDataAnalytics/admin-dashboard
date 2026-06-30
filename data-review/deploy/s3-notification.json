@@ -1,0 +1,4 @@
+{"LambdaFunctionConfigurations":[
+  {"Id":"data-review-final","LambdaFunctionArn":"arn:aws:lambda:ap-southeast-2:566474062827:function:data-review-build-trigger","Events":["s3:ObjectCreated:*"],"Filter":{"Key":{"FilterRules":[{"Name":"prefix","Value":"final/"}]}}},
+  {"Id":"data-review-helpers","LambdaFunctionArn":"arn:aws:lambda:ap-southeast-2:566474062827:function:data-review-build-trigger","Events":["s3:ObjectCreated:*"],"Filter":{"Key":{"FilterRules":[{"Name":"prefix","Value":"helpers/"}]}}}
+]}

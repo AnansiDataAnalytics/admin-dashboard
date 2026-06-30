@@ -1,0 +1,18 @@
+{
+  "name": "data-review-build",
+  "description": "Prebuilt-artifacts build for the data-review dashboard: fetch error-review -> flags.py + build_data (Mongo suppression) -> upload data.json + flags.parquet to error-review/built/",
+  "source": {
+    "type": "NO_SOURCE",
+    "buildspec": "version: 0.2\nenv:\n  variables:\n    DATA_REVIEW_DATA_ROOT: \"/scratch\"\n    DATA_REVIEW_DB: \"data_review\"\n    AWS_REGION: \"ap-southeast-1\"\n  parameter-store:\n    MONGODB_URI: \"/mongodb/data-review/uri\"\nphases:\n  build:\n    commands:\n      - echo \"fetch error-review inputs\"\n      - python /app/fetch_inputs.py --chainlinked-uri s3://error-review/final/ --gmd-uri s3://error-review/final/GMD.dta --helpers-uri s3://error-review/helpers/ --region ap-southeast-1 --dest /scratch\n      - echo \"compute flags (with Mongo suppression)\"\n      - python /app/flags.py\n      - echo \"build data.json\"\n      - python /app/build_data.py\n      - echo \"upload artifacts to error-review/built/\"\n      - aws s3 cp /app/flags.parquet s3://error-review/built/flags.parquet\n      - aws s3 cp /app/data.json s3://error-review/built/data.json\n      - echo \"done\"\n"
+  },
+  "artifacts": { "type": "NO_ARTIFACTS" },
+  "environment": {
+    "type": "LINUX_CONTAINER",
+    "image": "566474062827.dkr.ecr.ap-southeast-1.amazonaws.com/data-review:latest",
+    "computeType": "BUILD_GENERAL1_MEDIUM",
+    "imagePullCredentialsType": "SERVICE_ROLE"
+  },
+  "serviceRole": "arn:aws:iam::566474062827:role/data-review-build-role",
+  "timeoutInMinutes": 30,
+  "logsConfig": { "cloudWatchLogs": { "status": "ENABLED" } }
+}

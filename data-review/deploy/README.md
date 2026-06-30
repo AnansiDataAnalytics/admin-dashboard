@@ -29,6 +29,17 @@ docker push 566474062827.dkr.ecr.ap-southeast-1.amazonaws.com/data-review:latest
 aws apprunner create-service --cli-input-json file://deploy/apprunner-service.json --region ap-southeast-1
 #    Subsequent image refreshes: aws apprunner update-service --service-arn <arn> --source-configuration ...
 ```
+
+## Manual data refresh (until auto-rebuild is wired)
+New data uploaded to `error-review`? One command does fetch → rebuild (with Mongo
+suppression) → bake → push → redeploy:
+```bash
+bash deploy/refresh.sh        # override: SRC_BUCKET=... REGION=... bash deploy/refresh.sh
+```
+Agreed next step (deferred): switch to **prebuilt artifacts** — the build uploads
+`data.json`+`flags.parquet` to S3 and the container fetches them at start (no docker
+build per refresh), then wire an upload trigger. Until then, `refresh.sh` is the path.
+
 IAM roles (one-time): `data-review-apprunner-access` trusts `build.apprunner.amazonaws.com`
 (+ `AWSAppRunnerServicePolicyForECRAccess`); `data-review-apprunner-instance` trusts
 `tasks.apprunner.amazonaws.com` with S3 read on `data-review-app-test` + `ssm:GetParameter`

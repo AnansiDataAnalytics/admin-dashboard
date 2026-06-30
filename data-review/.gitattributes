@@ -1,0 +1,4 @@
+# Shell scripts must stay LF on checkout regardless of the host's core.autocrlf:
+# entrypoint.sh runs in a Linux container (/bin/sh fails on CRLF shebang/lines)
+# and deploy/refresh.sh runs under Git Bash.
+*.sh text eol=lf

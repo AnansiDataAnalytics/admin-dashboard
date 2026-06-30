@@ -2987,7 +2987,9 @@ function renderFindingsList() {
           parts.push(`<div class="find-card${isLast}" data-key="${esc(f.key)}" role="button" tabindex="0" title="Open ${esc(f.iso3)} ${esc(f.variable)} in the graph view">`
             + `<div class="fc-main">`
             + `<div class="fc-pair">${esc(f.iso3)} ${esc(f.variable)}${yrs ? ` <span style="color:var(--muted);font-weight:400">· ${esc(yrs)}</span>` : ``}</div>`
-            + `<div class="fc-meta">${flagsHtml}${f.n_cells ? ` ${f.n_cells} flagged cell${f.n_cells === 1 ? "" : "s"}` : ``}`
+            + `<div class="fc-meta">`
+            + (f.still_flagged === false ? `<span class="find-badge" style="background:#fef3c7;color:#92400e;border-color:#fde68a" title="A reviewer confirmed this error, but the current data no longer flags it (e.g. after a data refresh). Kept here because the review decision stands.">not in current data</span> ` : ``)
+            + `${flagsHtml}${f.n_cells ? ` ${f.n_cells} flagged cell${f.n_cells === 1 ? "" : "s"}` : ``}`
             + (f.issue_tags && f.issue_tags.length ? ` · tagged: ${esc(f.issue_tags.join(", "))}` : ``)
             + `</div>`
             + `<div class="fc-comment">${esc(f.comment_clean || "(no prose comment)")}</div>`

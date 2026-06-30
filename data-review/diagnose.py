@@ -372,7 +372,12 @@ def build_findings() -> dict:
     pending-fix item, attributed to its likely source (explicit [ISSUE-<src>]
     tags first, then the ledger's flagged-cell sources) and classified into a
     root-cause bucket. Consumed by serve.py's /findings endpoint."""
-    items = items_still_flagged(load_open_pending())
+    # Show EVERY active pending-fix item the reviewers confirmed -- not just the
+    # ones the current engine still flags. A data refresh/swap changes the flag
+    # set, but a reviewer-confirmed error stays actionable; we just tag whether
+    # the current flags.parquet still flags it (still_flagged) so the UI can mark
+    # the currently-active ones and float them to the top.
+    items = load_open_pending()
     rollup_data = rollups.build_rollups(items)
     fidx = _flag_index()
     findings = []
@@ -397,6 +402,7 @@ def build_findings() -> dict:
             "flags": fi.get("flags", []),
             "year_min": fi.get("year_min"),
             "year_max": fi.get("year_max"),
+            "still_flagged": bool(fi),                   # present in the current flags.parquet?
             "n_cells": it.get("n_cells", 1),
             "approved_by": it.get("approved_by"),
             "approved_at": it.get("approved_at"),
@@ -405,11 +411,11 @@ def build_findings() -> dict:
             # never triggers a live model call on the /findings GET path.
             "diagnosis": _llm_diagnose(it, cl, allow_api=False),
         })
-    # Source-systemic clusters first, biggest clusters first, so the likely
-    # shared root causes float to the top of the tab.
+    # Still-flagged (currently actionable) first; then source-systemic clusters,
+    # biggest clusters first, so likely shared root causes float to the top.
     label_rank = {"source-systemic": 0, "variable-systemic": 1,
                   "country-systemic": 2, "idiosyncratic": 3}
-    findings.sort(key=lambda f: (label_rank.get(f["label"], 9),
+    findings.sort(key=lambda f: (not f["still_flagged"], label_rank.get(f["label"], 9),
                                  -f["n_siblings"], f["iso3"], f["variable"]))
     return {"generated": _now_iso(), "n": len(findings), "findings": findings}
 
